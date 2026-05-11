@@ -4,9 +4,9 @@
  */
 import { buffer } from 'micro';
 import Stripe from 'stripe';
-import { supabaseAdmin } from '../../lib/supabase.js';
-import { initiatePhotographerPayout } from '../../lib/stripe.js';
-import { notifyPaymentReceived } from '../../lib/notifications.js';
+import { supabaseAdmin } from '../../../lib/supabase.js';
+import { initiatePhotographerPayout } from '../../../lib/stripe.js';
+import { notifyPaymentReceived } from '../../../lib/notifications.js';
 
 export const config = { api: { bodyParser: false } };
 
@@ -56,33 +56,28 @@ async function handlePaymentSucceeded(paymentIntent) {
   const auctionId = paymentIntent.metadata.auction_id;
   if (!auctionId) return;
 
-  // Update transaction record
   await supabaseAdmin.from('transactions')
     .update({ payment_status: 'succeeded', charge_id: paymentIntent.latest_charge })
     .eq('payment_intent_id', paymentIntent.id);
 
-  // Get auction + transaction details
   const { data: auction } = await supabaseAdmin
     .from('auctions')
-    .select('*, transactions!auction_id(*)')
+    .select('*')
     .eq('id', auctionId).single();
 
   if (!auction) return;
 
-  // Release full-res content URL to buyer
-  // Generate a signed URL valid for 7 days
+  // Mark rights as transferred and generate a 7-day signed download URL
   const { data: signedUrl } = await supabaseAdmin.storage
     .from('fullres')
     .createSignedUrl(`${auction.photographer_id}/${auctionId}`, 60 * 60 * 24 * 7);
 
-  // Store the download URL in the auction record
   if (signedUrl) {
     await supabaseAdmin.from('auctions')
       .update({ rights_transferred: true })
       .eq('id', auctionId);
   }
 
-  // Notify buyer with download link
   await supabaseAdmin.from('notifications').insert({
     user_id: auction.buyer_id,
     type: 'payment_received',
@@ -91,7 +86,6 @@ async function handlePaymentSucceeded(paymentIntent) {
     body: `Your payment for "${auction.title}" was successful. Your exclusive content and rights transfer are ready.`,
   });
 
-  // Initiate photographer payout
   const { data: photographer } = await supabaseAdmin
     .from('users').select('stripe_account_id, id').eq('id', auction.photographer_id).single();
 
@@ -122,27 +116,21 @@ async function handlePaymentFailed(paymentIntent) {
     .update({ payment_status: 'failed' })
     .eq('payment_intent_id', paymentIntent.id);
 
-  // Alert admin — may need to re-run auction
   console.error(`Payment failed for auction ${auctionId}:`, paymentIntent.last_payment_error?.message);
 }
 
 async function handleTransferCreated(transfer) {
-  // Mark payout as paid in our transactions table
   await supabaseAdmin.from('transactions')
     .update({ payout_status: 'paid', payout_completed_at: new Date().toISOString() })
     .eq('payout_id', transfer.id);
 }
 
 async function handlePayoutPaid(payout) {
-  // Stripe has confirmed funds landed in photographer's bank account
-  // Update transaction record to reflect final settled state
-  await supabaseAdmin.from('transactions')
-    .update({ payout_status: 'settled', payout_settled_at: new Date().toISOString() })
-    .eq('payout_id', payout.id);
+  // Payout landed in photographer's bank — already marked paid in handleTransferCreated
+  console.log(`Payout ${payout.id} confirmed by bank`);
 }
 
 async function handleAccountUpdated(account) {
-  // Sync photographer's Stripe account status
   const status = account.details_submitted && account.charges_enabled ? 'active' : 'restricted';
   await supabaseAdmin.from('users')
     .update({ stripe_account_status: status })

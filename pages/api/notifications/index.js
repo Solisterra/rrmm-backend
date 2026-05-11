@@ -3,7 +3,7 @@
  * PATCH /api/notifications/[id]   — mark as read
  * PATCH /api/notifications/read-all — mark all as read
  */
-import { supabaseAdmin, getUserFromRequest } from '../../lib/supabase.js';
+import { supabaseAdmin, getUserFromRequest } from '../../../lib/supabase.js';
 
 export default async function handler(req, res) {
   const user = await getUserFromRequest(req);

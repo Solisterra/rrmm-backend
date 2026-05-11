@@ -3,7 +3,7 @@
  * Returns a signed URL for direct-to-Supabase-Storage upload
  * Photographer uploads content directly from mobile — no server in the middle
  */
-import { supabaseAdmin, getUserFromRequest } from '../../lib/supabase.js';
+import { supabaseAdmin, getUserFromRequest } from '../../../lib/supabase.js';
 import { v4 as uuidv4 } from 'uuid';
 
 const MAX_PHOTO_MB = 50;

@@ -3,7 +3,7 @@
  * POST /api/auctions  — create a new auction (photographer only)
  *                       Requires a valid attestation payload
  */
-import { supabaseAdmin, getUserFromRequest } from '../../lib/supabase.js';
+import { supabaseAdmin, getUserFromRequest } from '../../../lib/supabase.js';
 
 export default async function handler(req, res) {
   if (req.method === 'GET')  return getAuctions(req, res);

@@ -3,7 +3,7 @@
  * Admin-only audit log of all photographer attestations
  * Useful for legal disputes, IP claims, or platform audits
  */
-import { supabaseAdmin, getUserFromRequest } from '../../lib/supabase.js';
+import { supabaseAdmin, getUserFromRequest } from '../../../lib/supabase.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });

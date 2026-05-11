@@ -3,7 +3,7 @@
  * PATCH  /api/auctions/[id]  — update auction (photographer or admin)
  * DELETE /api/auctions/[id]  — cancel auction (admin only)
  */
-import { supabaseAdmin, getUserFromRequest } from '../../lib/supabase.js';
+import { supabaseAdmin, getUserFromRequest } from '../../../lib/supabase.js';
 
 export default async function handler(req, res) {
   const { id } = req.query;

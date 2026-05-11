@@ -2,8 +2,8 @@
  * POST /api/auctions/[id]/bid
  * Place a bid on an auction
  */
-import { getUserFromRequest } from '../../../lib/supabase.js';
-import { placeBid } from '../../../lib/auction-engine.js';
+import { getUserFromRequest } from '../../../../lib/supabase.js';
+import { placeBid } from '../../../../lib/auction-engine.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });

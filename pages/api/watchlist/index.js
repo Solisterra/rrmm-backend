@@ -3,7 +3,7 @@
  * POST   /api/watchlist  — add to watchlist
  * DELETE /api/watchlist  — remove from watchlist
  */
-import { supabaseAdmin, getUserFromRequest } from '../../lib/supabase.js';
+import { supabaseAdmin, getUserFromRequest } from '../../../lib/supabase.js';
 
 export default async function handler(req, res) {
   const user = await getUserFromRequest(req);

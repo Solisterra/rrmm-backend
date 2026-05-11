@@ -2,9 +2,9 @@
  * POST /api/admin/review  — approve or reject pending content
  * GET  /api/admin/review  — list all pending auctions for review
  */
-import { supabaseAdmin, getUserFromRequest } from '../../lib/supabase.js';
-import { activateAuction } from '../../lib/auction-engine.js';
-import { notifyContentApproved, notifyContentRejected } from '../../lib/notifications.js';
+import { supabaseAdmin, getUserFromRequest } from '../../../lib/supabase.js';
+import { activateAuction } from '../../../lib/auction-engine.js';
+import { notifyContentApproved, notifyContentRejected } from '../../../lib/notifications.js';
 
 export default async function handler(req, res) {
   const user = await getUserFromRequest(req);

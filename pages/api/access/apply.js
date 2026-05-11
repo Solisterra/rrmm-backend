@@ -2,7 +2,7 @@
  * POST /api/access/apply  — public buyer application (no auth required)
  * GET  /api/access/apply  — admin: list applications by status
  */
-import { supabaseAdmin, getUserFromRequest } from '../../lib/supabase.js';
+import { supabaseAdmin, getUserFromRequest } from '../../../lib/supabase.js';
 import { v4 as uuidv4 } from 'uuid';
 
 export default async function handler(req, res) {
