@@ -12,7 +12,10 @@ import { notifyPaymentReceived } from "../../../lib/notifications.js";
 export const config = { api: { bodyParser: false } };
 
 let _stripe = null;
-const getStripe = () => (_stripe ??= new Stripe(process.env.STRIPE_SECRET_KEY));
+const getStripe = () =>
+  (_stripe ??= new Stripe(process.env.STRIPE_SECRET_KEY, {
+    apiVersion: "2026-04-22.dahlia",
+  }));
 
 async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
