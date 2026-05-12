@@ -10,10 +10,10 @@ async function handler(req, res) {
     return res.status(405).json({ error: "GET only" });
   }
 
-  // const requester = await getUserFromRequest(req);
-  // if (!requester) return res.status(401).json({ error: "Unauthorized" });
-  // if (requester.role !== "admin")
-  //   return res.status(403).json({ error: "Admin only" });
+  const requester = await getUserFromRequest(req);
+  if (!requester) return res.status(401).json({ error: "Unauthorized" });
+  if (requester.role !== "admin")
+    return res.status(403).json({ error: "Admin only" });
 
   const role = Array.isArray(req.query.role)
     ? req.query.role[0]
