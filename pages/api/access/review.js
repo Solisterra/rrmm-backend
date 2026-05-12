@@ -1,16 +1,18 @@
-import { withErrorHandling } from '../../../lib/api.js';
+import { withErrorHandling } from "../../../lib/api.js";
 /**
  * POST /api/access/review  — admin: approve or reject a buyer application
  */
-import { supabaseAdmin, getUserFromRequest } from '../../../lib/supabase.js';
-import sgMail from '@sendgrid/mail';
-import { v4 as uuidv4 } from 'uuid';
+import { supabaseAdmin, getUserFromRequest } from "../../../lib/supabase.js";
+import sgMail from "@sendgrid/mail";
+import { v4 as uuidv4 } from "uuid";
 
 async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "POST only" });
 
   const user = await getUserFromRequest(req);
-  if (!user || user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  if (!user || user.role !== "admin")
+    return res.status(403).json({ error: "Admin only" });
 
   const { applicationId, decision, note, directInviteEmail } = req.body;
 
@@ -19,18 +21,21 @@ async function handler(req, res) {
     const inviteToken = uuidv4();
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
 
-    await supabaseAdmin.from('buyer_applications').upsert({
-      email: directInviteEmail,
-      name: directInviteEmail,
-      channel_name: 'Direct Invite',
-      note: `Direct invite sent by admin ${user.display_name || user.email}`,
-      platforms: [],
-      status: 'approved',
-      reviewed_by: user.id,
-      reviewed_at: new Date().toISOString(),
-      invite_token: inviteToken,
-      invite_sent_at: new Date().toISOString(),
-    }, { onConflict: 'email' });
+    await supabaseAdmin.from("buyer_applications").upsert(
+      {
+        email: directInviteEmail,
+        name: directInviteEmail,
+        channel_name: "Direct Invite",
+        note: `Direct invite sent by admin ${user.display_name || user.email}`,
+        platforms: [],
+        status: "approved",
+        reviewed_by: user.id,
+        reviewed_at: new Date().toISOString(),
+        invite_token: inviteToken,
+        invite_sent_at: new Date().toISOString(),
+      },
+      { onConflict: "email" },
+    );
 
     await _sendInviteEmail(directInviteEmail, inviteToken, appUrl);
 
@@ -42,50 +47,82 @@ async function handler(req, res) {
   }
 
   // ── Review an existing application ───────────────────────────────────
-  if (!applicationId || !decision) return res.status(400).json({ error: 'applicationId and decision required' });
-  if (!['approved','rejected'].includes(decision)) return res.status(400).json({ error: 'Decision must be approved or rejected' });
+  if (!applicationId || !decision)
+    return res
+      .status(400)
+      .json({ error: "applicationId and decision required" });
+  if (!["approved", "rejected"].includes(decision))
+    return res
+      .status(400)
+      .json({ error: "Decision must be approved or rejected" });
 
   const { data: app } = await supabaseAdmin
-    .from('buyer_applications').select('*').eq('id', applicationId).single();
-  if (!app) return res.status(404).json({ error: 'Application not found' });
-  if (app.status !== 'pending') return res.status(400).json({ error: `Application already ${app.status}` });
+    .from("buyer_applications")
+    .select("*")
+    .eq("id", applicationId)
+    .single();
+  if (!app) return res.status(404).json({ error: "Application not found" });
+  if (app.status !== "pending")
+    return res.status(400).json({ error: `Application already ${app.status}` });
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-  const inviteToken = decision === 'approved' ? uuidv4() : null;
+  const inviteToken = decision === "approved" ? uuidv4() : null;
 
-  await supabaseAdmin.from('buyer_applications').update({
-    status: decision,
-    reviewed_by: user.id,
-    reviewed_at: new Date().toISOString(),
-    review_note: note || null,
-    invite_token: inviteToken,
-    invite_sent_at: decision === 'approved' ? new Date().toISOString() : null,
-  }).eq('id', applicationId);
+  await supabaseAdmin
+    .from("buyer_applications")
+    .update({
+      status: decision,
+      reviewed_by: user.id,
+      reviewed_at: new Date().toISOString(),
+      review_note: note || null,
+      invite_token: inviteToken,
+      invite_sent_at: decision === "approved" ? new Date().toISOString() : null,
+    })
+    .eq("id", applicationId);
 
-  if (decision === 'approved') {
-    await _sendApprovalEmail(app.email, app.name, app.channel_name, inviteToken, appUrl);
+  if (decision === "approved") {
+    await _sendApprovalEmail(
+      app.email,
+      app.name,
+      app.channel_name,
+      inviteToken,
+      appUrl,
+    );
     return res.status(200).json({
-      success: true, decision,
+      success: true,
+      decision,
       message: `${app.name} approved. Login invite sent to ${app.email}.`,
       inviteLink: `${appUrl}/join?token=${inviteToken}`,
     });
   } else {
     await _sendRejectionEmail(app.email, app.name, note);
-    return res.status(200).json({ success: true, decision, message: `${app.name}'s application rejected.` });
+    return res
+      .status(200)
+      .json({
+        success: true,
+        decision,
+        message: `${app.name}'s application rejected.`,
+      });
   }
 }
 
 function sendMail(msg) {
   if (!process.env.SENDGRID_API_KEY) return;
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-  return sgMail.send(msg).catch(e => console.error('Email error:', e.message));
+  return sgMail
+    .send(msg)
+    .catch((e) => console.error("Email error:", e.message));
 }
 
-const FROM = { email: process.env.SENDGRID_FROM_EMAIL, name: process.env.SENDGRID_FROM_NAME };
+const FROM = {
+  email: process.env.SENDGRID_FROM_EMAIL,
+  name: process.env.SENDGRID_FROM_NAME,
+};
 
 async function _sendApprovalEmail(email, name, channel, token, appUrl) {
   await sendMail({
-    to: email, from: FROM,
+    to: email,
+    from: FROM,
     subject: "You're approved — Rocket Ranch Media Marketplace",
     html: `<div style="background:#000;padding:32px;font-family:Arial,sans-serif;color:#fff;max-width:600px;margin:0 auto;border:1px solid #222">
       <div style="font-size:10px;color:#A0A0A0;letter-spacing:3px;margin-bottom:24px;text-transform:uppercase">Media Marketplace</div>
@@ -100,13 +137,14 @@ async function _sendApprovalEmail(email, name, channel, token, appUrl) {
 
 async function _sendRejectionEmail(email, name, reason) {
   await sendMail({
-    to: email, from: FROM,
-    subject: 'Your RRMM application — update',
+    to: email,
+    from: FROM,
+    subject: "Your RRMM application — update",
     html: `<div style="background:#000;padding:32px;font-family:Arial,sans-serif;color:#fff;max-width:600px;margin:0 auto;border:1px solid #222">
       <div style="font-size:10px;color:#A0A0A0;letter-spacing:3px;margin-bottom:24px;text-transform:uppercase">Media Marketplace</div>
       <div style="font-size:18px;font-weight:bold;margin-bottom:12px">Hi ${name},</div>
       <p style="color:#A0A0A0;line-height:1.6;margin-bottom:16px">Thank you for applying. After review, we're unable to approve your application at this time.</p>
-      ${reason ? `<p style="color:#A0A0A0;line-height:1.6;margin-bottom:16px"><strong style="color:#fff">Reason:</strong> ${reason}</p>` : ''}
+      ${reason ? `<p style="color:#A0A0A0;line-height:1.6;margin-bottom:16px"><strong style="color:#fff">Reason:</strong> ${reason}</p>` : ""}
       <p style="color:#A0A0A0;line-height:1.6">To appeal, email <a href="mailto:access@rocketranch.com" style="color:#fff">access@rocketranch.com</a>.</p>
     </div>`,
   });
@@ -114,7 +152,8 @@ async function _sendRejectionEmail(email, name, reason) {
 
 async function _sendInviteEmail(email, token, appUrl) {
   await sendMail({
-    to: email, from: FROM,
+    to: email,
+    from: FROM,
     subject: "You've been invited — Rocket Ranch Media Marketplace",
     html: `<div style="background:#000;padding:32px;font-family:Arial,sans-serif;color:#fff;max-width:600px;margin:0 auto;border:1px solid #222">
       <div style="font-size:10px;color:#A0A0A0;letter-spacing:3px;margin-bottom:24px;text-transform:uppercase">Media Marketplace</div>
