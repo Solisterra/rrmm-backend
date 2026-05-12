@@ -1,3 +1,4 @@
+import { withErrorHandling } from '../../../lib/api.js';
 /**
  * POST /api/access/apply  — public buyer application (no auth required)
  * GET  /api/access/apply  — admin: list applications by status
@@ -5,7 +6,7 @@
 import { supabaseAdmin, getUserFromRequest } from '../../../lib/supabase.js';
 import { v4 as uuidv4 } from 'uuid';
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'POST') return submitApplication(req, res);
   if (req.method === 'GET')  return listApplications(req, res);
   return res.status(405).json({ error: 'Method not allowed' });
@@ -83,3 +84,5 @@ async function listApplications(req, res) {
   if (error) return res.status(500).json({ error: error.message });
   return res.status(200).json({ applications: data, count: data?.length });
 }
+
+export default withErrorHandling(handler);

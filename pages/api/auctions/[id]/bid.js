@@ -1,3 +1,4 @@
+import { withErrorHandling } from '../../../../lib/api.js';
 /**
  * POST /api/auctions/[id]/bid
  * Place a bid on an auction
@@ -5,7 +6,7 @@
 import { getUserFromRequest } from '../../../../lib/supabase.js';
 import { placeBid } from '../../../../lib/auction-engine.js';
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
   const user = await getUserFromRequest(req);
@@ -28,3 +29,5 @@ export default async function handler(req, res) {
   if (result.error) return res.status(400).json({ error: result.error });
   return res.status(200).json(result);
 }
+
+export default withErrorHandling(handler);

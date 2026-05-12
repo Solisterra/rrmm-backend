@@ -1,3 +1,4 @@
+import { withErrorHandling } from '../../../lib/api.js';
 /**
  * GET    /api/watchlist  — get user's watchlist
  * POST   /api/watchlist  — add to watchlist
@@ -5,7 +6,7 @@
  */
 import { supabaseAdmin, getUserFromRequest } from '../../../lib/supabase.js';
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const user = await getUserFromRequest(req);
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
@@ -36,3 +37,5 @@ export default async function handler(req, res) {
 
   return res.status(405).json({ error: 'Method not allowed' });
 }
+
+export default withErrorHandling(handler);

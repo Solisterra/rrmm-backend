@@ -1,3 +1,4 @@
+import { withErrorHandling } from '../../../lib/api.js';
 /**
  * GET /api/admin/attestations
  * Admin-only audit log of all photographer attestations
@@ -5,7 +6,7 @@
  */
 import { supabaseAdmin, getUserFromRequest } from '../../../lib/supabase.js';
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
 
   const user = await getUserFromRequest(req);
@@ -29,3 +30,5 @@ export default async function handler(req, res) {
 
   return res.status(200).json({ attestations: data, count: data?.length });
 }
+
+export default withErrorHandling(handler);

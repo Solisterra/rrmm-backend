@@ -1,3 +1,4 @@
+import { withErrorHandling } from '../../../lib/api.js';
 /**
  * POST /api/admin/review  — approve or reject pending content
  * GET  /api/admin/review  — list all pending auctions for review
@@ -6,7 +7,7 @@ import { supabaseAdmin, getUserFromRequest } from '../../../lib/supabase.js';
 import { activateAuction } from '../../../lib/auction-engine.js';
 import { notifyContentApproved, notifyContentRejected } from '../../../lib/notifications.js';
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const user = await getUserFromRequest(req);
   if (!user || user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
 
@@ -43,3 +44,5 @@ export default async function handler(req, res) {
 
   return res.status(405).json({ error: 'Method not allowed' });
 }
+
+export default withErrorHandling(handler);

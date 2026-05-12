@@ -1,3 +1,4 @@
+import { withErrorHandling } from '../../../lib/api.js';
 /**
  * GET    /api/auctions/[id]  — get single auction detail
  * PATCH  /api/auctions/[id]  — update auction (photographer or admin)
@@ -5,7 +6,7 @@
  */
 import { supabaseAdmin, getUserFromRequest } from '../../../lib/supabase.js';
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const { id } = req.query;
   if (req.method === 'GET') return getAuction(req, res, id);
   if (req.method === 'PATCH') return updateAuction(req, res, id);
@@ -70,3 +71,5 @@ async function cancelAuction(req, res, id) {
   await supabaseAdmin.from('auctions').update({ status: 'cancelled' }).eq('id', id);
   return res.status(200).json({ success: true });
 }
+
+export default withErrorHandling(handler);

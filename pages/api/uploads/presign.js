@@ -1,3 +1,4 @@
+import { withErrorHandling } from '../../../lib/api.js';
 /**
  * POST /api/uploads/presign
  * Returns a signed URL for direct-to-Supabase-Storage upload
@@ -10,7 +11,7 @@ const MAX_PHOTO_MB = 50;
 const MAX_VIDEO_MB = 500;
 const ALLOWED_TYPES = ['image/jpeg','image/png','image/webp','image/tiff','video/mp4','video/quicktime','video/mov'];
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
   const user = await getUserFromRequest(req);
@@ -62,3 +63,5 @@ export default async function handler(req, res) {
     instructions: 'Upload preview to preview.signedUrl, full-res to fullres.signedUrl, then POST to /api/auctions with the returned publicUrl as preview_url',
   });
 }
+
+export default withErrorHandling(handler);

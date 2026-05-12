@@ -1,3 +1,4 @@
+import { withErrorHandling } from '../../../lib/api.js';
 /**
  * GET /api/stripe/connect  — get photographer's Stripe Connect onboarding link
  * POST /api/stripe/payment-intent  — create PaymentIntent for auction winner
@@ -6,7 +7,7 @@ import { getUserFromRequest } from '../../../lib/supabase.js';
 import { createConnectOnboardingLink, createPaymentIntent } from '../../../lib/stripe.js';
 import { supabaseAdmin } from '../../../lib/supabase.js';
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') return getOnboardingLink(req, res);
   if (req.method === 'POST') return createIntent(req, res);
   return res.status(405).json({ error: 'Method not allowed' });
@@ -55,3 +56,5 @@ async function createIntent(req, res) {
 
   return res.status(200).json({ clientSecret: intent.client_secret });
 }
+
+export default withErrorHandling(handler);

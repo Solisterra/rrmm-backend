@@ -1,3 +1,4 @@
+import { withErrorHandling } from '../../../lib/api.js';
 /**
  * POST /api/stripe/webhook
  * Handles Stripe events: payment succeeded → release content + payout photographer
@@ -10,9 +11,10 @@ import { notifyPaymentReceived } from '../../../lib/notifications.js';
 
 export const config = { api: { bodyParser: false } };
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+let _stripe = null;
+const getStripe = () => (_stripe ??= new Stripe(process.env.STRIPE_SECRET_KEY));
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const buf = await buffer(req);
@@ -20,7 +22,7 @@ export default async function handler(req, res) {
 
   let event;
   try {
-    event = stripe.webhooks.constructEvent(buf, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    event = getStripe().webhooks.constructEvent(buf, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     console.error('Webhook signature failed:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
@@ -136,3 +138,5 @@ async function handleAccountUpdated(account) {
     .update({ stripe_account_status: status })
     .eq('stripe_account_id', account.id);
 }
+
+export default withErrorHandling(handler);

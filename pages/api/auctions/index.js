@@ -1,3 +1,4 @@
+import { withErrorHandling } from '../../../lib/api.js';
 /**
  * GET  /api/auctions  — list active auctions (with filters)
  * POST /api/auctions  — create a new auction (photographer only)
@@ -5,7 +6,7 @@
  */
 import { supabaseAdmin, getUserFromRequest } from '../../../lib/supabase.js';
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET')  return getAuctions(req, res);
   if (req.method === 'POST') return createAuction(req, res);
   return res.status(405).json({ error: 'Method not allowed' });
@@ -146,3 +147,5 @@ async function createAuction(req, res) {
     message: 'Listing submitted for review. Attestation recorded. Typically approved within 15 minutes.'
   });
 }
+
+export default withErrorHandling(handler);

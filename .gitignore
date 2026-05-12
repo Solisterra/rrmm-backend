@@ -1,3 +1,6 @@
+# github
+.github/copilot-instructions.md
+
 # dependencies
 node_modules/
 .pnp
@@ -10,7 +13,7 @@ out/
 # env files — copy .env.example and fill in values locally
 .env
 .env.local
-.env.*.local
+.env.*
 
 # vercel
 .vercel

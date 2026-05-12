@@ -1,14 +1,12 @@
+import { withErrorHandling } from '../../../lib/api.js';
 /**
  * POST /api/users/register
  * Called after Supabase Auth signup to create the users profile row
  */
 import { supabaseAdmin } from '../../../lib/supabase.js';
-import { getOrCreateCustomer } from '../../../lib/stripe.js';
-import Stripe from 'stripe';
+import { getOrCreateCustomer, createConnectAccount } from '../../../lib/stripe.js';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
   const { authId, email, displayName, handle, role, followerCount } = req.body;
@@ -37,11 +35,7 @@ export default async function handler(req, res) {
 
   // Photographers get a Stripe Connect Express account
   if (role === 'photographer') {
-    const account = await stripe.accounts.create({
-      type: 'express', country: 'US', email,
-      capabilities: { transfers: { requested: true } },
-      business_profile: { name: displayName || handle },
-    });
+    const account = await createConnectAccount(email, displayName, handle);
     stripeAccountId = account.id;
   }
 
@@ -57,3 +51,5 @@ export default async function handler(req, res) {
   if (error) return res.status(500).json({ error: error.message });
   return res.status(201).json({ user: data });
 }
+
+export default withErrorHandling(handler);

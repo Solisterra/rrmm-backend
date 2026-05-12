@@ -1,3 +1,4 @@
+import { withErrorHandling } from '../../../lib/api.js';
 /**
  * POST /api/access/review  — admin: approve or reject a buyer application
  */
@@ -5,7 +6,7 @@ import { supabaseAdmin, getUserFromRequest } from '../../../lib/supabase.js';
 import sgMail from '@sendgrid/mail';
 import { v4 as uuidv4 } from 'uuid';
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
   const user = await getUserFromRequest(req);
@@ -124,3 +125,5 @@ async function _sendInviteEmail(email, token, appUrl) {
     </div>`,
   });
 }
+
+export default withErrorHandling(handler);

@@ -1,10 +1,11 @@
+import { withErrorHandling } from '../../../lib/api.js';
 /**
  * GET /api/users/earnings
  * Returns photographer earnings summary and transaction history
  */
 import { supabaseAdmin, getUserFromRequest } from '../../../lib/supabase.js';
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
   const user = await getUserFromRequest(req);
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -47,3 +48,5 @@ export default async function handler(req, res) {
     liveAuctions,
   });
 }
+
+export default withErrorHandling(handler);
