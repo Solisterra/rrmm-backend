@@ -210,8 +210,8 @@ CREATE TABLE buyer_applications (
   updated_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_buyer_apps_status ON buyer_applications(status);
-CREATE INDEX idx_buyer_apps_email  ON buyer_applications(email);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_buyer_apps_email ON buyer_applications(email);
+CREATE INDEX IF NOT EXISTS idx_buyer_apps_status ON buyer_applications(status);
 
 ALTER TABLE buyer_applications ENABLE ROW LEVEL SECURITY;
 -- Applications are insert-only from public; admins read/update all

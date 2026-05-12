@@ -4,7 +4,7 @@ import { withErrorHandling } from "../../../lib/api.js";
  * PATCH  /api/auctions/[id]  — update auction (photographer or admin)
  * DELETE /api/auctions/[id]  — cancel auction (admin only)
  */
-import { supabaseAdmin, getUserFromRequest } from "../../../lib/supabase.js";
+import { supabaseAdmin, getUserFromRequest, supabaseQuery } from "../../../lib/supabase.js";
 
 async function handler(req, res) {
   const { id } = req.query;
@@ -49,11 +49,9 @@ async function updateAuction(req, res, id) {
   const user = await getUserFromRequest(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
 
-  const { data: auction } = await supabaseAdmin
-    .from("auctions")
-    .select("*")
-    .eq("id", id)
-    .single();
+  const { data: auction } = await supabaseQuery(
+    supabaseAdmin.from("auctions").select("*").eq("id", id).single(),
+  );
   if (!auction) return res.status(404).json({ error: "Not found" });
 
   const isOwner = auction.photographer_id === user.id;
@@ -83,12 +81,11 @@ async function cancelAuction(req, res, id) {
   if (!user || user.role !== "admin")
     return res.status(403).json({ error: "Admin only" });
 
-  const { data: auction } = await supabaseAdmin
-    .from("auctions")
-    .select("status")
-    .eq("id", id)
-    .single();
-  if (auction?.status === "sold")
+  const { data: auction } = await supabaseQuery(
+    supabaseAdmin.from("auctions").select("status").eq("id", id).single(),
+  );
+  if (!auction) return res.status(404).json({ error: "Auction not found" });
+  if (auction.status === "sold")
     return res.status(400).json({ error: "Cannot cancel a sold auction" });
 
   await supabaseAdmin

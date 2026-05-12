@@ -9,7 +9,7 @@
 | GET, PATCH, DELETE | `/api/auctions/[id]` | Auction detail / update / cancel |
 | POST | `/api/auctions/[id]/bid` | Place a bid |
 | POST | `/api/uploads/presign` | Get signed upload URLs |
-| GET | `/api/users` | Get authenticated user profile |
+| GET | `/api/users` | List users (admin only, supports `role`, `limit`, `offset`) |
 | POST | `/api/users/register` | Create user profile after auth signup |
 | GET | `/api/users/earnings` | Photographer earnings summary and history |
 | GET, POST, DELETE | `/api/watchlist` | Get/add/remove watchlist items |

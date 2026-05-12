@@ -4,20 +4,22 @@ import { withErrorHandling } from "../../../lib/api.js";
  * POST   /api/watchlist  — add to watchlist
  * DELETE /api/watchlist  — remove from watchlist
  */
-import { supabaseAdmin, getUserFromRequest } from "../../../lib/supabase.js";
+import { supabaseAdmin, getUserFromRequest, supabaseQuery } from "../../../lib/supabase.js";
 
 async function handler(req, res) {
   const user = await getUserFromRequest(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
 
   if (req.method === "GET") {
-    const { data } = await supabaseAdmin
-      .from("watchlist")
-      .select("auction_id, created_at, auctions!auction_id(*)")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+    const { data } = await supabaseQuery(
+      supabaseAdmin
+        .from("watchlist")
+        .select("auction_id, created_at, auctions!auction_id(*)")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false }),
+    );
     return res.status(200).json({
-      watchlist: data?.map((w) => ({
+      watchlist: (data || []).map((w) => ({
         ...w.auctions,
         watchedAt: w.created_at,
       })),

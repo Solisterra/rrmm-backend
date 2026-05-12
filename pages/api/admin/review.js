@@ -3,7 +3,7 @@ import { withErrorHandling } from "../../../lib/api.js";
  * POST /api/admin/review  — approve or reject pending content
  * GET  /api/admin/review  — list all pending auctions for review
  */
-import { supabaseAdmin, getUserFromRequest } from "../../../lib/supabase.js";
+import { supabaseAdmin, getUserFromRequest, supabaseQuery } from "../../../lib/supabase.js";
 import { activateAuction } from "../../../lib/auction-engine.js";
 import {
   notifyContentApproved,
@@ -16,14 +16,16 @@ async function handler(req, res) {
     return res.status(403).json({ error: "Admin only" });
 
   if (req.method === "GET") {
-    const { data } = await supabaseAdmin
-      .from("auctions")
-      .select(
-        "*, users!photographer_id(handle, display_name, email, total_sales, verified)",
-      )
-      .eq("status", "pending")
-      .order("created_at", { ascending: true });
-    return res.status(200).json({ pending: data, count: data?.length });
+    const { data } = await supabaseQuery(
+      supabaseAdmin
+        .from("auctions")
+        .select(
+          "*, users!photographer_id(handle, display_name, email, total_sales, verified)",
+        )
+        .eq("status", "pending")
+        .order("created_at", { ascending: true }),
+    );
+    return res.status(200).json({ pending: data || [], count: data?.length ?? 0 });
   }
 
   if (req.method === "POST") {
@@ -44,6 +46,7 @@ async function handler(req, res) {
       .select("photographer_id, title")
       .eq("id", auctionId)
       .single();
+    if (!auction) return res.status(404).json({ error: "Auction not found" });
 
     if (decision === "approved") {
       await activateAuction(auctionId);

@@ -37,7 +37,7 @@ async function getAuctions(req, res) {
   if (error) return res.status(500).json({ error: error.message });
 
   // Never expose full_url in list responses
-  const sanitized = data.map(({ full_url, ...a }) => a);
+  const sanitized = (data || []).map(({ full_url, ...a }) => a);
   return res.status(200).json({ auctions: sanitized });
 }
 

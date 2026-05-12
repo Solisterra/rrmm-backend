@@ -18,6 +18,13 @@ out/
 # vercel
 .vercel
 
+#supabase
+supabase/.temp
+.supabase
+supabase/.env.local
+supabase/.env
+.migrations
+
 # misc
 .DS_Store
 *.pem

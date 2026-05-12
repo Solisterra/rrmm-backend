@@ -48,13 +48,13 @@ async function handler(req, res) {
 
   return res.status(200).json({
     stats: {
-      activeAuctions,
-      pendingReview,
-      totalUsers,
+      activeAuctions: activeAuctions ?? 0,
+      pendingReview: pendingReview ?? 0,
+      totalUsers: totalUsers ?? 0,
       dailyGMV,
       recentGMV: totalGMV,
     },
-    recentTransactions,
+    recentTransactions: recentTransactions || [],
   });
 }
 

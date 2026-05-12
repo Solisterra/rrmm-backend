@@ -28,7 +28,7 @@ async function handler(req, res) {
     .select("*")
     .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
 
-  if (auctionId) query = query.eq("auction_id", auctionId); // not in view but added for reference
+  if (auctionId) query = query.eq("auction_id", auctionId);
   if (photographerId) query = query.eq("photographer_email", photographerId);
   if (from) query = query.gte("attested_at", from);
   if (to) query = query.lte("attested_at", to);
@@ -36,7 +36,7 @@ async function handler(req, res) {
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
 
-  return res.status(200).json({ attestations: data, count: data?.length });
+  return res.status(200).json({ attestations: data || [], count: data?.length ?? 0 });
 }
 
 export default withErrorHandling(handler);
