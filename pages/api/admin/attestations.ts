@@ -1,32 +1,22 @@
-import { withErrorHandling } from "../../../lib/api.js";
-/**
- * GET /api/admin/attestations
- * Admin-only audit log of all photographer attestations
- * Useful for legal disputes, IP claims, or platform audits
- */
-import { supabaseAdmin, getUserFromRequest } from "../../../lib/supabase.js";
+import type { NextApiRequest, NextApiResponse } from "next";
+import { withErrorHandling } from "../../../lib/api";
+import { supabaseAdmin, getUserFromRequest } from "../../../lib/supabase";
+import type { DbUser } from "../../../lib/types";
 
-async function handler(req, res) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") return res.status(405).json({ error: "GET only" });
 
   const user = await getUserFromRequest(req);
-  if (!user || user.role !== "admin")
+  if (!user || (user as DbUser).role !== "admin")
     return res.status(403).json({ error: "Admin only" });
 
-  const {
-    auctionId,
-    photographerId,
-    from,
-    to,
-    limit = 50,
-    offset = 0,
-  } = req.query;
+  const { auctionId, photographerId, from, to, limit = "50", offset = "0" } =
+    req.query as Record<string, string | undefined>;
 
-  // Query the audit view for a clean joined result
   let query = supabaseAdmin
     .from("attestation_audit_log")
     .select("*")
-    .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
+    .range(parseInt(offset ?? "0"), parseInt(offset ?? "0") + parseInt(limit ?? "50") - 1);
 
   if (auctionId) query = query.eq("auction_id", auctionId);
   if (photographerId) query = query.eq("photographer_email", photographerId);

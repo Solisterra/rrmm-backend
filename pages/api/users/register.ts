@@ -1,55 +1,48 @@
-import { withErrorHandling } from "../../../lib/api.js";
-/**
- * POST /api/users/register
- * Called after Supabase Auth signup to create the users profile row
- */
-import { supabaseAdmin } from "../../../lib/supabase.js";
-import {
-  getOrCreateCustomer,
-  createConnectAccount,
-} from "../../../lib/stripe.js";
+import type { NextApiRequest, NextApiResponse } from "next";
+import { withErrorHandling } from "../../../lib/api";
+import { supabaseAdmin } from "../../../lib/supabase";
+import { getOrCreateCustomer, createConnectAccount } from "../../../lib/stripe";
 
-async function handler(req, res) {
-  if (req.method !== "POST")
-    return res.status(405).json({ error: "POST only" });
+async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
 
-  const { authId, email, displayName, handle, role, followerCount } = req.body;
+  const { authId, email, displayName, handle, role, followerCount } = req.body as {
+    authId?: string;
+    email?: string;
+    displayName?: string;
+    handle?: string;
+    role?: string;
+    followerCount?: number;
+  };
+
   if (!authId || !email || !role)
     return res.status(400).json({ error: "authId, email, role required" });
   if (!["photographer", "buyer"].includes(role))
-    return res
-      .status(400)
-      .json({ error: "Role must be photographer or buyer" });
+    return res.status(400).json({ error: "Role must be photographer or buyer" });
 
-  // Buyer minimum follower check
   if (role === "buyer" && (!followerCount || followerCount < 50000)) {
     return res.status(400).json({
-      error:
-        "Buyer accounts require a minimum 50,000 followers on at least one platform. Submit your channel for manual review.",
+      error: "Buyer accounts require a minimum 50,000 followers on at least one platform. Submit your channel for manual review.",
     });
   }
 
-  // Check handle uniqueness for photographers
   if (role === "photographer" && handle) {
     const { data: existing } = await supabaseAdmin
       .from("users")
       .select("id")
       .eq("handle", handle)
       .single();
-    if (existing)
-      return res.status(409).json({ error: "Handle already taken" });
+    if (existing) return res.status(409).json({ error: "Handle already taken" });
   }
 
-  let stripeCustomerId = null;
-  let stripeAccountId = null;
+  let stripeCustomerId: string | null = null;
+  let stripeAccountId: string | null = null;
 
-  // Buyers get a Stripe customer ID for charging
   if (role === "buyer") {
     const customer = await getOrCreateCustomer(email, displayName);
     stripeCustomerId = customer.id;
   }
 
-  // Photographers get a Stripe Connect Express account
   if (role === "photographer") {
     const account = await createConnectAccount(email, displayName, handle);
     stripeAccountId = account.id;
@@ -66,9 +59,8 @@ async function handler(req, res) {
       follower_count: followerCount || 0,
       stripe_customer_id: stripeCustomerId,
       stripe_account_id: stripeAccountId,
-      stripe_account_status:
-        role === "photographer" ? "pending_onboarding" : "n/a",
-      verified: false, // admin verifies manually
+      stripe_account_status: role === "photographer" ? "pending_onboarding" : "n/a",
+      verified: false,
     })
     .select()
     .single();

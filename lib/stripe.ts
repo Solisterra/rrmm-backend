@@ -1,9 +1,11 @@
 import Stripe from "stripe";
+import type { CreatePaymentIntentParams, InitiatePayoutParams } from "./types";
 
-let _stripe = null;
-function getStripe() {
-  return (_stripe ??= new Stripe(process.env.STRIPE_SECRET_KEY, {
-    apiVersion: "2026-04-22.dahlia",
+let _stripe: Stripe | null = null;
+function getStripe(): Stripe {
+  return (_stripe ??= new Stripe(process.env.STRIPE_SECRET_KEY!, {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    apiVersion: "2026-04-22.dahlia" as any,
   }));
 }
 
@@ -14,7 +16,7 @@ export async function createPaymentIntent({
   buyerStripeId,
   auctionId,
   photographerAccountId,
-}) {
+}: CreatePaymentIntentParams): Promise<Stripe.PaymentIntent> {
   const amountCents = Math.round(amount * 100);
   const platformFeeCents = Math.round(amountCents * PLATFORM_FEE);
   return getStripe().paymentIntents.create({
@@ -32,7 +34,7 @@ export async function initiatePhotographerPayout({
   photographerAccountId,
   amount,
   auctionId,
-}) {
+}: InitiatePayoutParams): Promise<Stripe.Transfer> {
   const amountCents = Math.round(amount * 100);
   return getStripe().transfers.create({
     amount: amountCents,
@@ -43,10 +45,10 @@ export async function initiatePhotographerPayout({
 }
 
 export async function createConnectOnboardingLink(
-  accountId,
-  returnUrl,
-  refreshUrl,
-) {
+  accountId: string,
+  returnUrl: string,
+  refreshUrl: string,
+): Promise<Stripe.AccountLink> {
   return getStripe().accountLinks.create({
     account: accountId,
     refresh_url: refreshUrl,
@@ -55,13 +57,20 @@ export async function createConnectOnboardingLink(
   });
 }
 
-export async function getOrCreateCustomer(email, name) {
+export async function getOrCreateCustomer(
+  email: string,
+  name?: string,
+): Promise<Stripe.Customer> {
   const existing = await getStripe().customers.list({ email, limit: 1 });
   if (existing.data.length > 0) return existing.data[0];
   return getStripe().customers.create({ email, name });
 }
 
-export async function createConnectAccount(email, displayName, handle) {
+export async function createConnectAccount(
+  email: string,
+  displayName?: string,
+  handle?: string,
+): Promise<Stripe.Account> {
   return getStripe().accounts.create({
     type: "express",
     country: "US",
