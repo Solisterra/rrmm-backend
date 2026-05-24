@@ -24,7 +24,7 @@ const RULES: RateLimitRule[] = [
   { id: "uploads", re: /^\/api\/uploads/, windowMs: 30_000, max: 20 },
   { id: "cron", re: /^\/api\/cron/, windowMs: 30_000, max: 10 },
   { id: "admin", re: /^\/api\/admin/, windowMs: 30_000, max: 120 },
-  { id: "api", re: /^\/api/, windowMs: 60_000, max: 100 },
+  { id: "api", re: /^\/api/, windowMs: 30_000, max: 100 },
 ];
 
 function getIp(req: NextRequest): string {
@@ -82,7 +82,7 @@ const SEC_HEADERS: Record<string, string> = {
   "X-DNS-Prefetch-Control": "off",
 };
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (req.method === "OPTIONS") {

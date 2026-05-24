@@ -14,6 +14,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withErrorHandling } from "../../../lib/api";
 import { supabase, supabaseAdmin, formatUser } from "../../../lib/supabase";
+import { findOrLinkUser } from "../../../lib/syncUser";
 import { getOrCreateCustomer, createConnectAccount } from "../../../lib/stripe";
 import type { DbUser, DbBuyerApplication } from "../../../lib/types";
 
@@ -28,15 +29,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { data: { user: authUser }, error: authErr } = await supabase.auth.getUser(token);
   if (authErr || !authUser) return res.status(401).json({ error: "Invalid or expired token" });
 
-  // Return existing profile immediately — all subsequent logins hit this path
-  const { data: existing } = await supabaseAdmin
-    .from("users")
-    .select("*")
-    .eq("auth_id", authUser.id)
-    .single();
-
+  const existing = await findOrLinkUser(authUser.id, authUser.email!);
   if (existing) {
-    return res.status(200).json({ user: formatUser(existing as DbUser), isNew: false });
+    return res.status(200).json({ user: formatUser(existing), isNew: false });
   }
 
   // ── New user — determine role from body ──────────────────────────────────

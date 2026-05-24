@@ -19,7 +19,7 @@ const CATEGORY_EMOJI: Record<AuctionCategory, string> = {
   "Milestone": "🏆",
 };
 
-export function formatAuction(row: DbAuction & { users?: { handle?: string; display_name?: string; photographer_handle?: string } }): FormattedAuction {
+export function formatAuction(row: DbAuction & { users?: { handle?: string | null; display_name?: string | null; photographer_handle?: string | null } | null }): FormattedAuction {
   const now = Date.now();
   const endsAt = row.ends_at ? new Date(row.ends_at).getTime() : null;
   const minutesLeft = endsAt ? Math.max(0, Math.round((endsAt - now) / 60000)) : 0;
@@ -39,6 +39,7 @@ export function formatAuction(row: DbAuction & { users?: { handle?: string; disp
 
   return {
     id: row.id,
+    photographer_id: row.photographer_id,
     title: row.title,
     category: row.category,
     photographer,

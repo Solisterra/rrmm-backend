@@ -15,6 +15,7 @@ function getAnon(): SupabaseClient {
   return (_anon ??= createClient(
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+    { auth: { autoRefreshToken: false, persistSession: false } },
   ));
 }
 

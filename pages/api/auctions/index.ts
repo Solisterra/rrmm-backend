@@ -1,7 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withErrorHandling } from "../../../lib/api";
 import { supabaseAdmin, getUserFromRequest } from "../../../lib/supabase";
-import type { DbUser, AuctionStatus } from "../../../lib/types";
+import { formatAuction } from "../../../lib/format";
+import type { DbUser, DbAuction, AuctionStatus } from "../../../lib/types";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "GET") return getAuctions(req, res);
@@ -30,8 +31,11 @@ async function getAuctions(req: NextApiRequest, res: NextApiResponse) {
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
 
-  const sanitized = (data || []).map(({ full_url: _full_url, ...a }: Record<string, unknown>) => a);
-  return res.status(200).json({ auctions: sanitized });
+  const auctions = (data as DbAuction[] | null ?? []).map((row) => {
+    const { full_url: _full_url, ...rest } = formatAuction(row);
+    return rest;
+  });
+  return res.status(200).json({ auctions });
 }
 
 interface AttestationPayload {

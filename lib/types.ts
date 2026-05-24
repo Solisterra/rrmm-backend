@@ -265,6 +265,7 @@ export interface RightsTransferParams {
 
 export interface FormattedAuction {
   id: string;
+  photographer_id: string;
   title: string;
   category: AuctionCategory;
   photographer: string;
