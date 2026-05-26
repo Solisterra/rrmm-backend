@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withErrorHandling } from "../../../lib/api";
 import { supabaseAdmin, getUserFromRequest } from "../../../lib/supabase";
-import type { DbUser } from "../../../lib/types";
+import type { DbUser, DbBuyerApplication } from "../../../lib/types";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "POST") return submitApplication(req, res);
@@ -93,7 +93,23 @@ async function listApplications(req: NextApiRequest, res: NextApiResponse) {
     .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
 
   if (error) return res.status(500).json({ error: error.message });
-  return res.status(200).json({ applications: data, count: data?.length });
+
+  const applications = (data as DbBuyerApplication[]).map((a) => ({
+    id: a.id,
+    name: a.name,
+    email: a.email,
+    channel: a.channel_name,
+    note: a.note ?? "",
+    platforms: a.platforms ?? [],
+    appliedAt: new Date(a.created_at).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }),
+    status: a.status,
+  }));
+
+  return res.status(200).json({ applications, count: applications.length });
 }
 
 export default withErrorHandling(handler);

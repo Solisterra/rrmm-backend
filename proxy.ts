@@ -1,6 +1,44 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 // ---------------------------------------------------------------------------
+// CORS — origin allowlist
+// A static value in next.config.js can't distinguish prod, preview deploys,
+// and localhost, so CORS is handled here per-request: if the Origin matches
+// a known entry, reflect it back; otherwise emit no CORS headers.
+// ---------------------------------------------------------------------------
+const ALLOWED_ORIGINS: Array<string | RegExp> = [
+  "https://rrmm-frontend.vercel.app",
+  "http://localhost:5173",
+  "http://localhost:3000",
+  // Vercel preview deploys for the frontend project
+  /^https:\/\/rrmm-frontend-[a-z0-9-]+\.vercel\.app$/,
+];
+
+function getAllowedOrigin(origin: string | null): string | null {
+  if (!origin) return null;
+  for (const entry of ALLOWED_ORIGINS) {
+    if (typeof entry === "string" ? entry === origin : entry.test(origin)) {
+      return origin;
+    }
+  }
+  return null;
+}
+
+function corsHeaders(origin: string | null): Record<string, string> {
+  const allowed = getAllowedOrigin(origin);
+  if (!allowed) return {};
+  return {
+    "Access-Control-Allow-Origin": allowed,
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
+    "Access-Control-Allow-Headers": "Authorization,Content-Type,X-Request-ID",
+    "Access-Control-Expose-Headers": "X-Request-ID,X-RateLimit-Limit,X-RateLimit-Remaining",
+    "Access-Control-Max-Age": "86400",
+    Vary: "Origin",
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Rate limit store — fixed-window counter, in-memory per isolate
 // ---------------------------------------------------------------------------
 const _store = new Map<string, number>();
@@ -23,7 +61,7 @@ const RULES: RateLimitRule[] = [
   { id: "bid", re: /\/bid$/, windowMs: 30_000, max: 30 },
   { id: "uploads", re: /^\/api\/uploads/, windowMs: 30_000, max: 20 },
   { id: "cron", re: /^\/api\/cron/, windowMs: 30_000, max: 10 },
-  { id: "admin", re: /^\/api\/admin/, windowMs: 30_000, max: 120 },
+  { id: "admin", re: /^\/api\/admin/, windowMs: 30_000, max: 150 },
   { id: "api", re: /^\/api/, windowMs: 30_000, max: 100 },
 ];
 
@@ -84,9 +122,13 @@ const SEC_HEADERS: Record<string, string> = {
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const origin = req.headers.get("origin");
+  const cors = corsHeaders(origin);
 
+  // Preflight: respond immediately with CORS headers. No rate limiting on
+  // OPTIONS — browsers send these automatically and shouldn't burn the bucket.
   if (req.method === "OPTIONS") {
-    return new NextResponse(null, { status: 204 });
+    return new NextResponse(null, { status: 204, headers: cors });
   }
 
   const ip = getIp(req);
@@ -111,6 +153,7 @@ export function proxy(req: NextRequest) {
           "X-RateLimit-Remaining": "0",
           "X-Request-ID": requestId,
           ...SEC_HEADERS,
+          ...cors,
         },
       },
     );
@@ -131,6 +174,9 @@ export function proxy(req: NextRequest) {
     res.headers.set("X-RateLimit-Remaining", String(remaining));
   }
   for (const [k, v] of Object.entries(SEC_HEADERS)) {
+    res.headers.set(k, v);
+  }
+  for (const [k, v] of Object.entries(cors)) {
     res.headers.set(k, v);
   }
 

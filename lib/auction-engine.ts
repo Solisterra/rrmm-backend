@@ -44,7 +44,7 @@ export async function placeBid({
       : a.reserve_price;
   if (amount < minBid) return { error: `Bid must be at least $${minBid}` };
   if (bidderId === a.photographer_id)
-    return { error: "Photographers cannot bid on own listings" };
+    return { error: "You cannot bid on your own listing." };
 
   const { data: currentWinner } = await supabaseAdmin
     .from("bids")

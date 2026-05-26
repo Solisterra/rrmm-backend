@@ -19,7 +19,6 @@ import { getOrCreateCustomer, createConnectAccount } from "../../../lib/stripe";
 import type { DbUser, DbBuyerApplication } from "../../../lib/types";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
 
   // Resolve the Supabase auth user from the Bearer token
