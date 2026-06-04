@@ -30,7 +30,16 @@ async function getAuction(req: NextApiRequest, res: NextApiResponse, id: string)
   const isBuyer = (user as DbUser | null)?.id === a.buyer_id;
   const hasPaid = a.status === "sold";
   const response = { ...a } as Record<string, unknown>;
-  if (!isBuyer || !hasPaid) delete response.full_url;
+  // `full_url` is a private-bucket path, not downloadable as-is. Only the paying
+  // buyer gets a short-lived signed download URL; everyone else gets nothing.
+  if (isBuyer && hasPaid && a.full_url) {
+    const { data: signed } = await supabaseAdmin.storage
+      .from("fullres")
+      .createSignedUrl(a.full_url, 60 * 60 * 24 * 7);
+    response.full_url = signed?.signedUrl ?? null;
+  } else {
+    delete response.full_url;
+  }
 
   return res.status(200).json({ auction: response });
 }

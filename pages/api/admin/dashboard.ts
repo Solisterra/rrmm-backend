@@ -1,7 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withErrorHandling } from "../../../lib/api";
 import { supabaseAdmin, getUserFromRequest } from "../../../lib/supabase";
-import type { DbUser } from "../../../lib/types";
+import { formatTransaction } from "../../../lib/format";
+import type { DbUser, DbTransaction } from "../../../lib/types";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") return res.status(405).end();
@@ -19,7 +20,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     supabaseAdmin.from("auctions").select("*", { count: "exact", head: true }).eq("status", "active"),
     supabaseAdmin.from("auctions").select("*", { count: "exact", head: true }).eq("status", "pending"),
     supabaseAdmin.from("users").select("*", { count: "exact", head: true }),
-    supabaseAdmin.from("transactions").select("*, auctions!auction_id(title)").order("created_at", { ascending: false }).limit(10),
+    supabaseAdmin.from("transactions").select("*, auctions!auction_id(title, category), buyer:users!buyer_id(display_name, handle)").order("created_at", { ascending: false }).limit(10),
     supabaseAdmin.from("bids").select("amount, created_at").gte("created_at", new Date(Date.now() - 86400000).toISOString()),
   ]);
 
@@ -40,7 +41,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       dailyGMV,
       recentGMV: totalGMV,
     },
-    recentTransactions: recentTransactions || [],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recentTransactions: (recentTransactions as any[] || []).map(formatTransaction),
   });
 }
 

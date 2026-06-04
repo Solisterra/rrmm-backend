@@ -3,7 +3,8 @@ import { withErrorHandling } from "../../../lib/api";
 import { supabaseAdmin, getUserFromRequest, supabaseQuery } from "../../../lib/supabase";
 import { activateAuction } from "../../../lib/auction-engine";
 import { notifyContentApproved, notifyContentRejected } from "../../../lib/notifications";
-import type { DbUser, ContentDecision } from "../../../lib/types";
+import { formatAuction } from "../../../lib/format";
+import type { DbUser, DbAuction, ContentDecision } from "../../../lib/types";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await getUserFromRequest(req);
@@ -18,7 +19,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         .eq("status", "pending")
         .order("created_at", { ascending: true }),
     );
-    return res.status(200).json({ pending: data || [], count: (data as unknown[] | null)?.length ?? 0 });
+    const pending = (data as DbAuction[] || []).map(formatAuction);
+    return res.status(200).json({ pending, count: pending.length });
   }
 
   if (req.method === "POST") {

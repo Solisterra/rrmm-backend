@@ -78,6 +78,7 @@ export function formatUser(profile: DbUser) {
     displayName: profile.display_name ?? "",
     handle: profile.handle ?? "",
     role: profile.role,
+    verified: profile.verified ?? false,
     ...(profile.follower_count ? { followerCount: profile.follower_count } : {}),
   };
 }

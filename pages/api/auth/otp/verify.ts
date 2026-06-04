@@ -11,10 +11,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(400).json({ error: "email and code are required" });
   }
 
+  // Must match the type used in send.ts (admin.generateLink({ type: "magiclink" })).
+  // Supabase binds each OTP to its generation type; passing "email" here would
+  // come back as "Token has expired or is invalid" even with a fresh code.
   const { data, error } = await supabase.auth.verifyOtp({
     email,
     token: code,
-    type: "email",
+    type: "magiclink",
   });
 
   if (error || !data.session || !data.user) {

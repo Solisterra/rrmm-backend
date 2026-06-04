@@ -22,7 +22,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   if (directInviteEmail) {
     const inviteToken = uuidv4();
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    const appUrl = process.env.FRONTEND_URL ?? "http://localhost:5173";
     await supabaseAdmin.from("buyer_applications").upsert(
       {
         email: directInviteEmail,
@@ -62,7 +62,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (a.status !== "pending")
     return res.status(400).json({ error: `Application already ${a.status}` });
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL!;
+  const appUrl = process.env.FRONTEND_URL ?? "http://localhost:5173";
   const inviteToken = decision === "approved" ? uuidv4() : null;
 
   await supabaseAdmin.from("buyer_applications").update({

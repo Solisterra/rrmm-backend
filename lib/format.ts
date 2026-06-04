@@ -22,7 +22,9 @@ const CATEGORY_EMOJI: Record<AuctionCategory, string> = {
 export function formatAuction(row: DbAuction & { users?: { handle?: string | null; display_name?: string | null; photographer_handle?: string | null } | null }): FormattedAuction {
   const now = Date.now();
   const endsAt = row.ends_at ? new Date(row.ends_at).getTime() : null;
-  const minutesLeft = endsAt ? Math.max(0, Math.round((endsAt - now) / 60000)) : 0;
+  const minutesLeft = endsAt
+    ? Math.max(0, Math.round((endsAt - now) / 60000))
+    : (row.duration_hours ?? 0) * 60;
 
   const photographer =
     row.users?.handle ??

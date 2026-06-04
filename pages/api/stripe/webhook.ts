@@ -73,12 +73,21 @@ async function handlePaymentSucceeded(paymentIntent: Stripe.PaymentIntent) {
   if (!auction) return;
 
   const a = auction as DbAuction;
-  const { data: signedUrl } = await supabaseAdmin.storage
-    .from("fullres")
-    .createSignedUrl(`${a.photographer_id}/${auctionId}`, 60 * 60 * 24 * 7);
+  // The full-res file lives at the path stored in `full_url` (set from presign's
+  // `filePath` = `${photographer_id}/${fileId}.${ext}`). Sign that exact path —
+  // reconstructing it from the auction id does not match what was uploaded.
+  if (a.full_url) {
+    const { data: signedUrl, error: signErr } = await supabaseAdmin.storage
+      .from("fullres")
+      .createSignedUrl(a.full_url, 60 * 60 * 24 * 7);
 
-  if (signedUrl) {
-    await supabaseAdmin.from("auctions").update({ rights_transferred: true }).eq("id", auctionId);
+    if (signErr || !signedUrl) {
+      console.error(`Could not sign full_url for auction ${auctionId}:`, signErr?.message);
+    } else {
+      await supabaseAdmin.from("auctions").update({ rights_transferred: true }).eq("id", auctionId);
+    }
+  } else {
+    console.error(`Auction ${auctionId} has no full_url; cannot deliver content.`);
   }
 
   await supabaseAdmin.from("notifications").insert({

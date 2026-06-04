@@ -48,9 +48,12 @@ interface AttestationPayload {
 async function createAuction(req: NextApiRequest, res: NextApiResponse) {
   const user = await getUserFromRequest(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
-  if ((user as DbUser).role !== "photographer")
-    return res.status(403).json({ error: "Photographers only" });
-  if (!(user as DbUser).verified)
+  // Photographers and admins can create listings; admins are exempt from the
+  // photographer verification gate (it's a photographer-onboarding concept).
+  const role = (user as DbUser).role;
+  if (role !== "photographer" && role !== "admin")
+    return res.status(403).json({ error: "Photographers or admins only" });
+  if (role === "photographer" && !(user as DbUser).verified)
     return res.status(403).json({ error: "Account pending verification" });
 
   const {
@@ -177,7 +180,7 @@ async function createAuction(req: NextApiRequest, res: NextApiResponse) {
     .eq("id", auctionRow.id);
 
   return res.status(201).json({
-    auction: { ...auction, attestation_id: ar.id },
+    auction: formatAuction(auction as DbAuction),
     attestation: {
       id: ar.id,
       attested_at: ar.attested_at,

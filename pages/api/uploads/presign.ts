@@ -22,8 +22,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   const user = await getUserFromRequest(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
-  if ((user as DbUser).role !== "photographer")
-    return res.status(403).json({ error: "Photographers only" });
+  // Uploads are for photographers; admins are allowed too (testing / managing
+  // content on a photographer's behalf). Buyers cannot upload.
+  const role = (user as DbUser).role;
+  if (role !== "photographer" && role !== "admin")
+    return res.status(403).json({ error: "Photographers or admins only" });
 
   const u = user as DbUser;
   const { fileType, fileSizeMb } = req.body as {
