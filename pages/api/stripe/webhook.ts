@@ -3,7 +3,6 @@ import { withErrorHandling } from "../../../lib/api";
 import { buffer } from "micro";
 import Stripe from "stripe";
 import { supabaseAdmin } from "../../../lib/supabase";
-import { initiatePhotographerPayout } from "../../../lib/stripe";
 import { notifyPaymentReceived } from "../../../lib/notifications";
 import type { DbAuction, DbUser } from "../../../lib/types";
 
@@ -60,10 +59,17 @@ async function handlePaymentSucceeded(paymentIntent: Stripe.PaymentIntent) {
   const auctionId = paymentIntent.metadata.auction_id;
   if (!auctionId) return;
 
+  // Hosted Checkout creates the PaymentIntent at pay time, so the transaction
+  // row has no payment_intent_id yet — key off auction_id (from PI metadata) and
+  // record the PI id now.
   await supabaseAdmin
     .from("transactions")
-    .update({ payment_status: "succeeded", charge_id: paymentIntent.latest_charge })
-    .eq("payment_intent_id", paymentIntent.id);
+    .update({
+      payment_status: "succeeded",
+      payment_intent_id: paymentIntent.id,
+      charge_id: paymentIntent.latest_charge,
+    })
+    .eq("auction_id", auctionId);
 
   const { data: auction } = await supabaseAdmin
     .from("auctions")
@@ -106,14 +112,12 @@ async function handlePaymentSucceeded(paymentIntent: Stripe.PaymentIntent) {
 
   const p = photographer as Pick<DbUser, "stripe_account_id" | "id"> | null;
   if (p?.stripe_account_id) {
-    const transfer = await initiatePhotographerPayout({
-      photographerAccountId: p.stripe_account_id,
-      amount: a.photographer_payout!,
-      auctionId,
-    });
-
+    // The charge was a destination charge (transfer_data.destination), so Stripe
+    // already moved the photographer's net to their connected account as part of
+    // this payment. Do NOT create a second transfer here — just record that the
+    // payout went out and notify them. (The transfer.created webhook reconciles
+    // the final settled state.)
     await supabaseAdmin.from("transactions").update({
-      payout_id: transfer.id,
       payout_status: "in_transit",
       payout_initiated_at: new Date().toISOString(),
     }).eq("auction_id", auctionId);
@@ -127,8 +131,8 @@ async function handlePaymentFailed(paymentIntent: Stripe.PaymentIntent) {
   if (!auctionId) return;
   await supabaseAdmin
     .from("transactions")
-    .update({ payment_status: "failed" })
-    .eq("payment_intent_id", paymentIntent.id);
+    .update({ payment_status: "failed", payment_intent_id: paymentIntent.id })
+    .eq("auction_id", auctionId);
   console.error(`Payment failed for auction ${auctionId}:`, paymentIntent.last_payment_error?.message);
 }
 

@@ -3,6 +3,7 @@ import {
   notifyOutbid,
   notifyAuctionWon,
   notifyAuctionLost,
+  notifyAuctionSold,
   notifyWatchlistUrgent,
 } from "./notifications";
 import type {
@@ -187,6 +188,7 @@ export async function closeAuction(auctionId: string): Promise<CloseAuctionResul
     .single();
 
   await notifyAuctionWon({ bidderId: wb.bidder_id, auctionId, amount: salePrice });
+  await notifyAuctionSold({ photographerId: a.photographer_id, auctionId, amount: salePrice });
   await _notifyAllBidders(auctionId, "lost", wb.bidder_id);
 
   return {

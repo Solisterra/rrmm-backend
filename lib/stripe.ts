@@ -1,5 +1,9 @@
 import Stripe from "stripe";
-import type { CreatePaymentIntentParams, InitiatePayoutParams } from "./types";
+import type {
+  CreatePaymentIntentParams,
+  CreateCheckoutSessionParams,
+  InitiatePayoutParams,
+} from "./types";
 
 let _stripe: Stripe | null = null;
 function getStripe(): Stripe {
@@ -27,6 +31,53 @@ export async function createPaymentIntent({
     application_fee_amount: platformFeeCents,
     transfer_data: { destination: photographerAccountId },
     metadata: { auction_id: auctionId },
+  });
+}
+
+// Hosted Stripe Checkout for a won auction. Returns a Session whose `url` the
+// frontend redirects to; Stripe hosts the card page. With a connected
+// photographer account this is a destination charge (auto-pays their net and
+// takes our fee), so no separate transfer is needed afterwards.
+export async function createCheckoutSession({
+  amount,
+  buyerStripeId,
+  auctionId,
+  title,
+  photographerAccountId,
+  successUrl,
+  cancelUrl,
+}: CreateCheckoutSessionParams): Promise<Stripe.Checkout.Session> {
+  const amountCents = Math.round(amount * 100);
+  const platformFeeCents = Math.round(amountCents * PLATFORM_FEE);
+
+  // auction_id on the PaymentIntent is what the webhook keys off to settle the
+  // transaction and trigger content delivery. With a connected photographer
+  // account this becomes a destination charge (fee + auto-transfer of the net).
+  return getStripe().checkout.sessions.create({
+    mode: "payment",
+    customer: buyerStripeId,
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "usd",
+          unit_amount: amountCents,
+          product_data: { name: title },
+        },
+      },
+    ],
+    payment_intent_data: {
+      metadata: { auction_id: auctionId },
+      ...(photographerAccountId
+        ? {
+            application_fee_amount: platformFeeCents,
+            transfer_data: { destination: photographerAccountId },
+          }
+        : {}),
+    },
+    metadata: { auction_id: auctionId },
+    success_url: successUrl,
+    cancel_url: cancelUrl,
   });
 }
 

@@ -8,12 +8,13 @@ export type AuctionCategory = "Launch Event" | "Test Event" | "Infrastructure" |
 export type ContentType = "photo" | "video" | "drone" | "raw";
 export type Exclusivity = "Full Exclusive" | "Platform Exclusive" | "Non-Exclusive";
 export type NotificationType =
-  | "new_listing" | "outbid" | "auction_won" | "auction_lost"
+  | "new_listing" | "outbid" | "auction_won" | "auction_lost" | "auction_sold"
   | "payment_received" | "payout_sent" | "auction_ending"
   | "content_approved" | "content_rejected";
 export type PaymentStatus = "pending" | "processing" | "succeeded" | "failed" | "refunded";
 export type PayoutStatus = "pending" | "in_transit" | "paid" | "failed";
 export type ApplicationStatus = "pending" | "approved" | "rejected";
+export type CapabilityStatus = "none" | "pending" | "verified" | "rejected";
 export type ContentDecision = "approved" | "rejected" | "flagged";
 export type StripeAccountStatus = "pending" | "pending_onboarding" | "active" | "restricted" | "n/a";
 
@@ -27,9 +28,12 @@ export interface DbUser {
   display_name: string | null;
   role: Role;
   verified: boolean;
+  bid_status: CapabilityStatus;
+  sell_status: CapabilityStatus;
   follower_count: number;
   avatar_url: string | null;
   bio: string | null;
+  portfolio_url: string | null;
   stripe_customer_id: string | null;
   stripe_account_id: string | null;
   stripe_account_status: StripeAccountStatus;
@@ -206,6 +210,19 @@ export interface CreatePaymentIntentParams {
   photographerAccountId: string;
 }
 
+export interface CreateCheckoutSessionParams {
+  amount: number;
+  buyerStripeId: string;
+  auctionId: string;
+  title: string;
+  // When present, use a destination charge: take our fee and pay the
+  // photographer's net automatically. When absent, the platform collects and
+  // payout is reconciled separately.
+  photographerAccountId?: string | null;
+  successUrl: string;
+  cancelUrl: string;
+}
+
 export interface InitiatePayoutParams {
   photographerAccountId: string;
   amount: number;
@@ -229,6 +246,13 @@ export interface NotifyAuctionWonParams {
 export interface NotifyAuctionLostParams {
   bidderId: string;
   auctionId: string;
+}
+
+// Seller-facing: their listing sold (sent at close, before buyer payment).
+export interface NotifyAuctionSoldParams {
+  photographerId: string;
+  auctionId: string;
+  amount: number;
 }
 
 export interface NotifyPaymentReceivedParams {

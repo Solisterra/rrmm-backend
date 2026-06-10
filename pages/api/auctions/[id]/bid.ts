@@ -11,8 +11,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!user) return res.status(401).json({ error: "Unauthorized" });
 
   const u = user as DbUser;
-  if (u.role !== "buyer") return res.status(403).json({ error: "Verified buyer account required" });
-  if (!u.verified) return res.status(403).json({ error: "Buyer account pending verification" });
+  if (u.bid_status !== "verified")
+    return res.status(403).json({ error: "Verified buyer account required to bid" });
   if (!u.stripe_customer_id)
     return res.status(400).json({ error: "Payment method required. Please add a card to your account." });
 

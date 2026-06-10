@@ -79,7 +79,14 @@ export function formatUser(profile: DbUser) {
     handle: profile.handle ?? "",
     role: profile.role,
     verified: profile.verified ?? false,
+    bidStatus: profile.bid_status ?? "none",
+    sellStatus: profile.sell_status ?? "none",
+    canBid: (profile.bid_status ?? "none") === "verified",
+    canSell: (profile.sell_status ?? "none") === "verified",
+    stripeStatus: profile.stripe_account_status ?? "pending",
     ...(profile.follower_count ? { followerCount: profile.follower_count } : {}),
+    ...(profile.bio ? { bio: profile.bio } : {}),
+    ...(profile.portfolio_url ? { portfolioUrl: profile.portfolio_url } : {}),
   };
 }
 

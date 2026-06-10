@@ -22,13 +22,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   const user = await getUserFromRequest(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
-  // Uploads are for photographers; admins are allowed too (testing / managing
-  // content on a photographer's behalf). Buyers cannot upload.
-  const role = (user as DbUser).role;
-  if (role !== "photographer" && role !== "admin")
-    return res.status(403).json({ error: "Photographers or admins only" });
-
+  // Uploads are for verified sellers (and admins).
   const u = user as DbUser;
+  if (u.role !== "admin" && u.sell_status !== "verified")
+    return res.status(403).json({ error: "Seller verification required to upload" });
   const { fileType, fileSizeMb } = req.body as {
     fileType?: string;
     fileSizeMb?: number;

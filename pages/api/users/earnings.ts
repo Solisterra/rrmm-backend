@@ -7,10 +7,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") return res.status(405).json({ error: "GET only" });
   const user = await getUserFromRequest(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
-  if ((user as DbUser).role !== "photographer")
-    return res.status(403).json({ error: "Photographers only" });
-
   const u = user as DbUser;
+  if (u.sell_status !== "verified")
+    return res.status(403).json({ error: "Seller verification required" });
 
   const { data: transactions } = await supabaseQuery(
     supabaseAdmin
