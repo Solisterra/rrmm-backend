@@ -12,9 +12,12 @@ CREATE TABLE users (
   display_name TEXT,
   role TEXT NOT NULL CHECK (role IN ('photographer','buyer','admin')),
   verified BOOLEAN DEFAULT FALSE,
+  bid_status TEXT NOT NULL DEFAULT 'none' CHECK (bid_status IN ('none','pending','verified','rejected')),
+  sell_status TEXT NOT NULL DEFAULT 'none' CHECK (sell_status IN ('none','pending','verified','rejected')),
   follower_count INTEGER DEFAULT 0,
   avatar_url TEXT,
   bio TEXT,
+  portfolio_url TEXT,
   stripe_customer_id TEXT UNIQUE,
   stripe_account_id TEXT UNIQUE,
   stripe_account_status TEXT DEFAULT 'pending',
@@ -210,8 +213,8 @@ CREATE TABLE buyer_applications (
   updated_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_buyer_apps_status ON buyer_applications(status);
-CREATE INDEX idx_buyer_apps_email  ON buyer_applications(email);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_buyer_apps_email ON buyer_applications(email);
+CREATE INDEX IF NOT EXISTS idx_buyer_apps_status ON buyer_applications(status);
 
 ALTER TABLE buyer_applications ENABLE ROW LEVEL SECURITY;
 -- Applications are insert-only from public; admins read/update all

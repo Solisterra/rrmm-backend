@@ -84,6 +84,7 @@ CREATE TRIGGER trg_no_attestation_delete
 CREATE VIEW attestation_audit_log AS
   SELECT
     a.id               AS attestation_id,
+    a.auction_id,
     au.title           AS auction_title,
     au.category,
     u.handle           AS photographer_handle,

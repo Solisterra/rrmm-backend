@@ -1,28 +1,38 @@
 {
   "name": "rrmm-backend",
   "version": "1.0.0",
+  "type": "module",
   "description": "Rocket Ranch Media Marketplace Backend API",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "cron": "node lib/cron.js"
+    "cron": "tsx lib/cron.ts"
   },
   "dependencies": {
-    "next": "^14.0.0",
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0",
-    "@supabase/supabase-js": "^2.39.0",
-    "stripe": "^14.0.0",
-    "twilio": "^4.19.0",
     "@sendgrid/mail": "^8.1.0",
-    "sharp": "^0.33.0",
-    "uuid": "^9.0.0",
-    "date-fns": "^3.0.0"
+    "@supabase/supabase-js": "^2.39.0",
+    "docusign-esign": "^9.0.0",
+    "dotenv": "^17.4.2",
+    "micro": "^10.0.1",
+    "next": "^16.2.6",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "stripe": "^22.1.1",
+    "twilio": "^6.0.2",
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0"
+    "@types/micro": "^7.3.7",
+    "@types/node": "^25.7.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.22.2",
+    "typescript": "^6.0.3"
   },
-  "engines": { "node": ">=18.0.0" }
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }

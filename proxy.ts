@@ -5,25 +5,11 @@ import { NextResponse, type NextRequest } from "next/server";
 // A static value in next.config.js can't distinguish prod, preview deploys,
 // and localhost, so CORS is handled here per-request: if the Origin matches
 // a known entry, reflect it back; otherwise emit no CORS headers.
-//
-// FRONTEND_URL (comma-separated) is the source of truth, shared with
-// lib/api.ts so the middleware preflight and the per-route headers agree.
-// The literals below are fallbacks so CORS still works if the env is unset.
 // ---------------------------------------------------------------------------
-const ENV_ORIGINS = (process.env.FRONTEND_URL ?? "")
-  .split(",")
-  .map((o) => o.trim())
-  .filter(Boolean);
-
 const ALLOWED_ORIGINS: Array<string | RegExp> = [
-  ...new Set([
-    ...ENV_ORIGINS,
-    "https://rrmm.io",
-    "https://www.rrmm.io",
-    "https://rrmm-frontend.vercel.app",
-    "http://localhost:5173",
-    "http://localhost:3000",
-  ]),
+  "https://rrmm-frontend.vercel.app",
+  "http://localhost:5173",
+  "http://localhost:3000",
   // Vercel preview deploys for the frontend project
   /^https:\/\/rrmm-frontend-[a-z0-9-]+\.vercel\.app$/,
 ];
