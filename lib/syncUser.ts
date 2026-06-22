@@ -6,7 +6,10 @@ import type { DbUser } from "./types";
  * Falls back to email lookup and links the auth_id for accounts created
  * before OTP was the primary auth method (seeded rows, legacy email/password).
  */
-export async function findOrLinkUser(authId: string, email: string): Promise<DbUser | null> {
+export async function findOrLinkUser(
+  authId: string,
+  email: string,
+): Promise<DbUser | null> {
   const { data: byAuthId } = await supabaseAdmin
     .from("users")
     .select("*")

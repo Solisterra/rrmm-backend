@@ -4,25 +4,30 @@ import { supabaseAdmin } from "../../../lib/supabase";
 import { getOrCreateCustomer, createConnectAccount } from "../../../lib/stripe";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "POST only" });
 
-  const { authId, email, displayName, handle, role, followerCount } = req.body as {
-    authId?: string;
-    email?: string;
-    displayName?: string;
-    handle?: string;
-    role?: string;
-    followerCount?: number;
-  };
+  const { authId, email, displayName, handle, role, followerCount } =
+    req.body as {
+      authId?: string;
+      email?: string;
+      displayName?: string;
+      handle?: string;
+      role?: string;
+      followerCount?: number;
+    };
 
   if (!authId || !email || !role)
     return res.status(400).json({ error: "authId, email, role required" });
   if (!["photographer", "buyer"].includes(role))
-    return res.status(400).json({ error: "Role must be photographer or buyer" });
+    return res
+      .status(400)
+      .json({ error: "Role must be photographer or buyer" });
 
   if (role === "buyer" && (!followerCount || followerCount < 50000)) {
     return res.status(400).json({
-      error: "Buyer accounts require a minimum 50,000 followers on at least one platform. Submit your channel for manual review.",
+      error:
+        "Buyer accounts require a minimum 50,000 followers on at least one platform. Submit your channel for manual review.",
     });
   }
 
@@ -32,7 +37,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       .select("id")
       .eq("handle", handle)
       .single();
-    if (existing) return res.status(409).json({ error: "Handle already taken" });
+    if (existing)
+      return res.status(409).json({ error: "Handle already taken" });
   }
 
   let stripeCustomerId: string | null = null;
@@ -59,7 +65,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       follower_count: followerCount || 0,
       stripe_customer_id: stripeCustomerId,
       stripe_account_id: stripeAccountId,
-      stripe_account_status: role === "photographer" ? "pending_onboarding" : "n/a",
+      stripe_account_status:
+        role === "photographer" ? "pending_onboarding" : "n/a",
       verified: false,
     })
     .select()

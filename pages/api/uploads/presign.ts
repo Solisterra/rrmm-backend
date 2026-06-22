@@ -25,7 +25,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Uploads are for verified sellers (and admins).
   const u = user as DbUser;
   if (u.role !== "admin" && u.sell_status !== "verified")
-    return res.status(403).json({ error: "Seller verification required to upload" });
+    return res
+      .status(403)
+      .json({ error: "Seller verification required to upload" });
   const { fileType, fileSizeMb } = req.body as {
     fileType?: string;
     fileSizeMb?: number;

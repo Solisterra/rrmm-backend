@@ -1,6 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withErrorHandling } from "../../../lib/api";
-import { supabaseAdmin, getUserFromRequest, supabaseQuery } from "../../../lib/supabase";
+import {
+  supabaseAdmin,
+  getUserFromRequest,
+  supabaseQuery,
+} from "../../../lib/supabase";
 import type { DbUser, DbNotification } from "../../../lib/types";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -18,14 +22,18 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         .order("created_at", { ascending: false })
         .limit(50),
     );
-    const unread = (data as DbNotification[] | null)?.filter((n) => !n.read).length ?? 0;
+    const unread =
+      (data as DbNotification[] | null)?.filter((n) => !n.read).length ?? 0;
     return res.status(200).json({ notifications: data || [], unread });
   }
 
   if (req.method === "PATCH") {
     const { id, readAll } = req.body as { id?: string; readAll?: boolean };
     if (readAll) {
-      await supabaseAdmin.from("notifications").update({ read: true }).eq("user_id", u.id);
+      await supabaseAdmin
+        .from("notifications")
+        .update({ read: true })
+        .eq("user_id", u.id);
     } else if (id) {
       await supabaseAdmin
         .from("notifications")

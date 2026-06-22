@@ -40,9 +40,7 @@ export async function placeBid({
   if (new Date() > new Date(a.ends_at!)) return { error: "Auction has ended" };
 
   const minBid =
-    a.current_bid > 0
-      ? Math.ceil(a.current_bid * 1.05)
-      : a.reserve_price;
+    a.current_bid > 0 ? Math.ceil(a.current_bid * 1.05) : a.reserve_price;
   if (amount < minBid) return { error: `Bid must be at least $${minBid}` };
   if (bidderId === a.photographer_id)
     return { error: "You cannot bid on your own listing." };
@@ -61,14 +59,33 @@ export async function placeBid({
     winner.bidder_id !== bidderId
   ) {
     const counterBid = Math.min(amount + 50, winner.proxy_max!);
-    await _recordBid({ auctionId, bidderId: winner.bidder_id, amount: counterBid, isProxy: true, proxyMax: winner.proxy_max, isWinning: true });
-    await _recordBid({ auctionId, bidderId, amount, isProxy: false, proxyMax: null, isWinning: false });
+    await _recordBid({
+      auctionId,
+      bidderId: winner.bidder_id,
+      amount: counterBid,
+      isProxy: true,
+      proxyMax: winner.proxy_max,
+      isWinning: true,
+    });
+    await _recordBid({
+      auctionId,
+      bidderId,
+      amount,
+      isProxy: false,
+      proxyMax: null,
+      isWinning: false,
+    });
     await supabaseAdmin
       .from("auctions")
       .update({ current_bid: counterBid, bid_count: a.bid_count + 2 })
       .eq("id", auctionId);
     await notifyOutbid({ bidderId, auctionId, newBid: counterBid });
-    return { success: true, winning: false, currentBid: counterBid, message: "Outbid by proxy" };
+    return {
+      success: true,
+      winning: false,
+      currentBid: counterBid,
+      message: "Outbid by proxy",
+    };
   }
 
   if (winner) {
@@ -76,18 +93,34 @@ export async function placeBid({
       .from("bids")
       .update({ is_winning: false, outbid_at: new Date().toISOString() })
       .eq("id", winner.id);
-    await notifyOutbid({ bidderId: winner.bidder_id, auctionId, newBid: amount });
+    await notifyOutbid({
+      bidderId: winner.bidder_id,
+      auctionId,
+      newBid: amount,
+    });
   }
 
-  await _recordBid({ auctionId, bidderId, amount, isProxy: !!proxyMax, proxyMax, isWinning: true });
+  await _recordBid({
+    auctionId,
+    bidderId,
+    amount,
+    isProxy: !!proxyMax,
+    proxyMax,
+    isWinning: true,
+  });
 
   const endsAt = new Date(a.ends_at!);
   const now = new Date();
   const minutesLeft = (endsAt.getTime() - now.getTime()) / 60000;
   let newEndsAt = a.ends_at!;
 
-  if (minutesLeft <= AUTO_EXTEND_TRIGGER_MINUTES && a.extension_count < MAX_EXTENSIONS) {
-    newEndsAt = new Date(endsAt.getTime() + AUTO_EXTEND_MINUTES * 60 * 1000).toISOString();
+  if (
+    minutesLeft <= AUTO_EXTEND_TRIGGER_MINUTES &&
+    a.extension_count < MAX_EXTENSIONS
+  ) {
+    newEndsAt = new Date(
+      endsAt.getTime() + AUTO_EXTEND_MINUTES * 60 * 1000,
+    ).toISOString();
     await supabaseAdmin
       .from("auctions")
       .update({
@@ -106,10 +139,18 @@ export async function placeBid({
   }
 
   if (minutesLeft <= 30) {
-    await notifyWatchlistUrgent({ auctionId, minutesLeft: Math.round(minutesLeft) });
+    await notifyWatchlistUrgent({
+      auctionId,
+      minutesLeft: Math.round(minutesLeft),
+    });
   }
 
-  return { success: true, winning: true, currentBid: amount, endsAt: newEndsAt };
+  return {
+    success: true,
+    winning: true,
+    currentBid: amount,
+    endsAt: newEndsAt,
+  };
 }
 
 interface RecordBidParams {
@@ -121,7 +162,14 @@ interface RecordBidParams {
   isWinning: boolean;
 }
 
-async function _recordBid({ auctionId, bidderId, amount, isProxy, proxyMax, isWinning }: RecordBidParams): Promise<void> {
+async function _recordBid({
+  auctionId,
+  bidderId,
+  amount,
+  isProxy,
+  proxyMax,
+  isWinning,
+}: RecordBidParams): Promise<void> {
   await supabaseAdmin.from("bids").insert({
     auction_id: auctionId,
     bidder_id: bidderId,
@@ -134,7 +182,9 @@ async function _recordBid({ auctionId, bidderId, amount, isProxy, proxyMax, isWi
 
 // ── Close an auction ──────────────────────────────────────────────────────────
 
-export async function closeAuction(auctionId: string): Promise<CloseAuctionResult> {
+export async function closeAuction(
+  auctionId: string,
+): Promise<CloseAuctionResult> {
   const { data: auction } = await supabaseAdmin
     .from("auctions")
     .select("*, users!photographer_id(stripe_account_id, email)")
@@ -153,7 +203,10 @@ export async function closeAuction(auctionId: string): Promise<CloseAuctionResul
   const wb = winningBid as (DbBid & { users?: DbUser }) | null;
 
   if (!wb || wb.amount < a.reserve_price) {
-    await supabaseAdmin.from("auctions").update({ status: "unsold" }).eq("id", auctionId);
+    await supabaseAdmin
+      .from("auctions")
+      .update({ status: "unsold" })
+      .eq("id", auctionId);
     await _notifyAllBidders(auctionId, "unsold");
     return { success: true, sold: false };
   }
@@ -187,8 +240,16 @@ export async function closeAuction(auctionId: string): Promise<CloseAuctionResul
     .select()
     .single();
 
-  await notifyAuctionWon({ bidderId: wb.bidder_id, auctionId, amount: salePrice });
-  await notifyAuctionSold({ photographerId: a.photographer_id, auctionId, amount: salePrice });
+  await notifyAuctionWon({
+    bidderId: wb.bidder_id,
+    auctionId,
+    amount: salePrice,
+  });
+  await notifyAuctionSold({
+    photographerId: a.photographer_id,
+    auctionId,
+    amount: salePrice,
+  });
   await _notifyAllBidders(auctionId, "lost", wb.bidder_id);
 
   return {
@@ -211,7 +272,10 @@ async function _notifyAllBidders(
     .eq("auction_id", auctionId)
     .neq("bidder_id", excludeBidderId);
   const uniqueBidders = [
-    ...new Set((bids as Array<{ bidder_id: string }> | null)?.map((b) => b.bidder_id) ?? []),
+    ...new Set(
+      (bids as Array<{ bidder_id: string }> | null)?.map((b) => b.bidder_id) ??
+        [],
+    ),
   ];
   for (const bidderId of uniqueBidders) {
     if (outcome === "lost") await notifyAuctionLost({ bidderId, auctionId });
@@ -220,7 +284,9 @@ async function _notifyAllBidders(
 
 // ── Activate a pending auction ────────────────────────────────────────────────
 
-export async function activateAuction(auctionId: string): Promise<ActivateAuctionResult> {
+export async function activateAuction(
+  auctionId: string,
+): Promise<ActivateAuctionResult> {
   const { data: auction } = await supabaseAdmin
     .from("auctions")
     .select("*")
@@ -230,7 +296,9 @@ export async function activateAuction(auctionId: string): Promise<ActivateAuctio
   if (!a || a.status !== "pending") return { error: "Not a pending auction" };
 
   const startsAt = new Date();
-  const endsAt = new Date(startsAt.getTime() + a.duration_hours * 60 * 60 * 1000);
+  const endsAt = new Date(
+    startsAt.getTime() + a.duration_hours * 60 * 60 * 1000,
+  );
 
   await supabaseAdmin
     .from("auctions")
@@ -261,7 +329,9 @@ export async function activateAuction(auctionId: string): Promise<ActivateAuctio
 
 // ── Process all expired auctions (called by cron) ─────────────────────────────
 
-export async function processExpiredAuctions(): Promise<Array<{ id: string } & CloseAuctionResult>> {
+export async function processExpiredAuctions(): Promise<
+  Array<{ id: string } & CloseAuctionResult>
+> {
   const { data: expired } = await supabaseAdmin
     .from("auctions")
     .select("id")

@@ -3,20 +3,52 @@ import type { NextApiRequest, NextApiResponse } from "next";
 // ── Enum-like string unions ───────────────────────────────────────────────────
 
 export type Role = "photographer" | "buyer" | "admin";
-export type AuctionStatus = "pending" | "active" | "closing" | "sold" | "unsold" | "cancelled";
-export type AuctionCategory = "Launch Event" | "Test Event" | "Infrastructure" | "Breaking" | "Scenic" | "Milestone";
+export type AuctionStatus =
+  | "pending"
+  | "active"
+  | "closing"
+  | "sold"
+  | "unsold"
+  | "cancelled";
+export type AuctionCategory =
+  | "Launch Event"
+  | "Test Event"
+  | "Infrastructure"
+  | "Breaking"
+  | "Scenic"
+  | "Milestone";
 export type ContentType = "photo" | "video" | "drone" | "raw";
-export type Exclusivity = "Full Exclusive" | "Platform Exclusive" | "Non-Exclusive";
+export type Exclusivity =
+  | "Full Exclusive"
+  | "Platform Exclusive"
+  | "Non-Exclusive";
 export type NotificationType =
-  | "new_listing" | "outbid" | "auction_won" | "auction_lost" | "auction_sold"
-  | "payment_received" | "payout_sent" | "auction_ending"
-  | "content_approved" | "content_rejected";
-export type PaymentStatus = "pending" | "processing" | "succeeded" | "failed" | "refunded";
+  | "new_listing"
+  | "outbid"
+  | "auction_won"
+  | "auction_lost"
+  | "auction_sold"
+  | "payment_received"
+  | "payout_sent"
+  | "auction_ending"
+  | "content_approved"
+  | "content_rejected";
+export type PaymentStatus =
+  | "pending"
+  | "processing"
+  | "succeeded"
+  | "failed"
+  | "refunded";
 export type PayoutStatus = "pending" | "in_transit" | "paid" | "failed";
 export type ApplicationStatus = "pending" | "approved" | "rejected";
 export type CapabilityStatus = "none" | "pending" | "verified" | "rejected";
 export type ContentDecision = "approved" | "rejected" | "flagged";
-export type StripeAccountStatus = "pending" | "pending_onboarding" | "active" | "restricted" | "n/a";
+export type StripeAccountStatus =
+  | "pending"
+  | "pending_onboarding"
+  | "active"
+  | "restricted"
+  | "n/a";
 
 // ── DB row shapes ─────────────────────────────────────────────────────────────
 

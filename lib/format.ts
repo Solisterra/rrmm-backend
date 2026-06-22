@@ -13,13 +13,21 @@ import type {
 const CATEGORY_EMOJI: Record<AuctionCategory, string> = {
   "Launch Event": "🚀",
   "Test Event": "🔥",
-  "Infrastructure": "🏗️",
-  "Breaking": "⚡",
-  "Scenic": "🌅",
-  "Milestone": "🏆",
+  Infrastructure: "🏗️",
+  Breaking: "⚡",
+  Scenic: "🌅",
+  Milestone: "🏆",
 };
 
-export function formatAuction(row: DbAuction & { users?: { handle?: string | null; display_name?: string | null; photographer_handle?: string | null } | null }): FormattedAuction {
+export function formatAuction(
+  row: DbAuction & {
+    users?: {
+      handle?: string | null;
+      display_name?: string | null;
+      photographer_handle?: string | null;
+    } | null;
+  },
+): FormattedAuction {
   const now = Date.now();
   const endsAt = row.ends_at ? new Date(row.ends_at).getTime() : null;
   const minutesLeft = endsAt
@@ -61,7 +69,9 @@ export function formatAuction(row: DbAuction & { users?: { handle?: string | nul
   };
 }
 
-export function formatApplication(row: DbBuyerApplication): FormattedApplication {
+export function formatApplication(
+  row: DbBuyerApplication,
+): FormattedApplication {
   return {
     id: row.id,
     name: row.name,
@@ -96,8 +106,10 @@ export function formatTransaction(
     buyer_display_name?: string;
   },
 ): FormattedTransaction {
-  const auctionTitle = row.auctions?.title ?? row.auction_title ?? "Unknown Auction";
-  const auctionCategory = row.auctions?.category ?? row.auction_category ?? null;
+  const auctionTitle =
+    row.auctions?.title ?? row.auction_title ?? "Unknown Auction";
+  const auctionCategory =
+    row.auctions?.category ?? row.auction_category ?? null;
   const buyerName =
     row.buyer?.display_name ??
     row.buyer?.handle ??

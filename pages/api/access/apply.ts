@@ -10,14 +10,15 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 }
 
 async function submitApplication(req: NextApiRequest, res: NextApiResponse) {
-  const { name, email, channelName, contentFocus, note, platforms } = req.body as {
-    name?: string;
-    email?: string;
-    channelName?: string;
-    contentFocus?: string;
-    note?: string;
-    platforms?: Array<{ followers?: string }>;
-  };
+  const { name, email, channelName, contentFocus, note, platforms } =
+    req.body as {
+      name?: string;
+      email?: string;
+      channelName?: string;
+      contentFocus?: string;
+      note?: string;
+      platforms?: Array<{ followers?: string }>;
+    };
 
   if (!name || !email || !channelName || !note || !platforms?.length) {
     return res.status(400).json({ error: "Missing required fields" });
@@ -43,25 +44,55 @@ async function submitApplication(req: NextApiRequest, res: NextApiResponse) {
   if (existing) {
     const e = existing as { status: string };
     if (e.status === "approved")
-      return res.status(409).json({ error: "This email already has an approved buyer account. Check your inbox for your login link." });
+      return res
+        .status(409)
+        .json({
+          error:
+            "This email already has an approved buyer account. Check your inbox for your login link.",
+        });
     if (e.status === "pending")
-      return res.status(409).json({ error: "An application for this email is already under review. We'll be in touch within 24 hours." });
+      return res
+        .status(409)
+        .json({
+          error:
+            "An application for this email is already under review. We'll be in touch within 24 hours.",
+        });
     if (e.status === "rejected")
-      return res.status(409).json({ error: "A previous application from this email was not approved. Contact access@rocketranch.com to appeal." });
+      return res
+        .status(409)
+        .json({
+          error:
+            "A previous application from this email was not approved. Contact access@rocketranch.com to appeal.",
+        });
   }
 
-  const ip = (req.headers["x-forwarded-for"] as string) || req.socket?.remoteAddress || "unknown";
+  const ip =
+    (req.headers["x-forwarded-for"] as string) ||
+    req.socket?.remoteAddress ||
+    "unknown";
   const userAgent = req.headers["user-agent"] || "unknown";
 
   const { data, error } = await supabaseAdmin
     .from("buyer_applications")
-    .insert({ name, email, channel_name: channelName, content_focus: contentFocus, note, platforms, ip_address: ip, user_agent: userAgent })
+    .insert({
+      name,
+      email,
+      channel_name: channelName,
+      content_focus: contentFocus,
+      note,
+      platforms,
+      ip_address: ip,
+      user_agent: userAgent,
+    })
     .select()
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
 
-  const { data: admins } = await supabaseAdmin.from("users").select("id").eq("role", "admin");
+  const { data: admins } = await supabaseAdmin
+    .from("users")
+    .select("id")
+    .eq("role", "admin");
   for (const admin of (admins as Array<{ id: string }>) || []) {
     await supabaseAdmin.from("notifications").insert({
       user_id: admin.id,
@@ -73,7 +104,8 @@ async function submitApplication(req: NextApiRequest, res: NextApiResponse) {
 
   return res.status(201).json({
     success: true,
-    message: "Application received. We'll review it within 24 hours and email you directly.",
+    message:
+      "Application received. We'll review it within 24 hours and email you directly.",
     applicationId: (data as { id: string }).id,
   });
 }
@@ -83,7 +115,11 @@ async function listApplications(req: NextApiRequest, res: NextApiResponse) {
   if (!user || (user as DbUser).role !== "admin")
     return res.status(403).json({ error: "Admin only" });
 
-  const { status = "pending", limit = "50", offset = "0" } = req.query as Record<string, string>;
+  const {
+    status = "pending",
+    limit = "50",
+    offset = "0",
+  } = req.query as Record<string, string>;
 
   const { data, error } = await supabaseAdmin
     .from("buyer_applications")

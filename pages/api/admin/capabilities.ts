@@ -1,6 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withErrorHandling } from "../../../lib/api";
-import { supabaseAdmin, getUserFromRequest, formatUser, supabaseQuery } from "../../../lib/supabase";
+import {
+  supabaseAdmin,
+  getUserFromRequest,
+  formatUser,
+  supabaseQuery,
+} from "../../../lib/supabase";
 import type { DbUser } from "../../../lib/types";
 
 // Admin review of capability requests. A member who requested bidding ("buyer")
@@ -35,9 +40,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     if (!userId) return res.status(400).json({ error: "userId required" });
     if (capability !== "buyer" && capability !== "seller")
-      return res.status(400).json({ error: "capability must be 'buyer' or 'seller'" });
+      return res
+        .status(400)
+        .json({ error: "capability must be 'buyer' or 'seller'" });
     if (!decision || !["approved", "rejected"].includes(decision))
-      return res.status(400).json({ error: "Decision must be approved or rejected" });
+      return res
+        .status(400)
+        .json({ error: "Decision must be approved or rejected" });
 
     const column = capability === "buyer" ? "bid_status" : "sell_status";
     const newStatus = decision === "approved" ? "verified" : "rejected";
@@ -53,7 +62,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     await supabaseAdmin.from("notifications").insert({
       user_id: userId,
       type: decision === "approved" ? "content_approved" : "content_rejected",
-      title: decision === "approved" ? "✓ Verification approved" : "Verification update",
+      title:
+        decision === "approved"
+          ? "✓ Verification approved"
+          : "Verification update",
       body:
         decision === "approved"
           ? `You can now ${capability === "buyer" ? "place bids" : "create listings"}.`

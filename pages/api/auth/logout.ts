@@ -13,11 +13,14 @@ import { supabaseAdmin } from "../../../lib/supabase";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "POST only" });
 
   const token = req.headers.authorization?.replace("Bearer ", "");
   if (token) {
-    const { data } = await supabaseAdmin.auth.getUser(token).catch(() => ({ data: null }));
+    const { data } = await supabaseAdmin.auth
+      .getUser(token)
+      .catch(() => ({ data: null }));
     const userId = (data as { user?: { id: string } } | null)?.user?.id;
     if (userId) {
       await supabaseAdmin.auth.admin.signOut(userId, "others").catch(() => {});

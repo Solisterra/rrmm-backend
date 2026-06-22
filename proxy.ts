@@ -32,7 +32,8 @@ function corsHeaders(origin: string | null): Record<string, string> {
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
     "Access-Control-Allow-Headers": "Authorization,Content-Type,X-Request-ID",
-    "Access-Control-Expose-Headers": "X-Request-ID,X-RateLimit-Limit,X-RateLimit-Remaining",
+    "Access-Control-Expose-Headers":
+      "X-Request-ID,X-RateLimit-Limit,X-RateLimit-Remaining",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };

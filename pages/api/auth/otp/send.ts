@@ -36,7 +36,8 @@ function emailHtml(code: string, link?: string): string {
 }
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "POST only" });
 
   const { email } = req.body as { email?: string };
   if (!email) return res.status(400).json({ error: "email is required" });
@@ -86,7 +87,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!apiKey || !fromEmail) {
     if (process.env.NODE_ENV !== "production") {
       console.log(`[otp] ${email} code=${code}`);
-      return res.status(200).json({ success: true, devCode: code, devLink: link });
+      return res
+        .status(200)
+        .json({ success: true, devCode: code, devLink: link });
     }
     return res.status(500).json({ error: "Email is not configured" });
   }
@@ -97,7 +100,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       to: email,
       from: {
         email: fromEmail,
-        name: process.env.SENDGRID_FROM_NAME ?? "Rocket Ranch Media Marketplace",
+        name:
+          process.env.SENDGRID_FROM_NAME ?? "Rocket Ranch Media Marketplace",
       },
       subject: "Your RRMM sign-in code",
       html: emailHtml(code, link),

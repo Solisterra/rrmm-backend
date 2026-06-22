@@ -1,6 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withErrorHandling } from "../../../lib/api";
-import { supabaseAdmin, getUserFromRequest, supabaseQuery } from "../../../lib/supabase";
+import {
+  supabaseAdmin,
+  getUserFromRequest,
+  supabaseQuery,
+} from "../../../lib/supabase";
 import type { DbUser } from "../../../lib/types";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -18,7 +22,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         .order("created_at", { ascending: false }),
     );
     return res.status(200).json({
-      watchlist: (data as Array<{ auctions: Record<string, unknown>; created_at: string }> | null || []).map((w) => ({
+      watchlist: (
+        (data as Array<{
+          auctions: Record<string, unknown>;
+          created_at: string;
+        }> | null) || []
+      ).map((w) => ({
         ...w.auctions,
         watchedAt: w.created_at,
       })),
@@ -27,7 +36,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   if (req.method === "POST") {
     const { auctionId } = req.body as { auctionId?: string };
-    if (!auctionId) return res.status(400).json({ error: "auctionId required" });
+    if (!auctionId)
+      return res.status(400).json({ error: "auctionId required" });
     const { data, error } = await supabaseAdmin
       .from("watchlist")
       .upsert(

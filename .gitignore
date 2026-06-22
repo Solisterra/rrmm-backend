@@ -37,7 +37,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# claude
+# AGENTS
 .claude
 CLAUDE.md
+.github/copilot-instructions.md
 .env*.local

@@ -22,14 +22,19 @@ import { getOrCreateCustomer, createConnectAccount } from "../../../lib/stripe";
 import type { DbUser, DbBuyerApplication } from "../../../lib/types";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "POST only" });
 
   // Resolve the Supabase auth user from the Bearer token
   const token = req.headers.authorization?.replace("Bearer ", "");
   if (!token) return res.status(401).json({ error: "Bearer token required" });
 
-  const { data: { user: authUser }, error: authErr } = await supabase.auth.getUser(token);
-  if (authErr || !authUser) return res.status(401).json({ error: "Invalid or expired token" });
+  const {
+    data: { user: authUser },
+    error: authErr,
+  } = await supabase.auth.getUser(token);
+  if (authErr || !authUser)
+    return res.status(401).json({ error: "Invalid or expired token" });
 
   const existing = await findOrLinkUser(authUser.id, authUser.email!);
   if (existing) {
@@ -37,25 +42,39 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   // ── New user — determine role from body ──────────────────────────────────
-  const { role, handle, displayName, inviteToken, bio, portfolioUrl, followerCount, adminCode } =
-    req.body as {
-      role?: string;
-      handle?: string;
-      displayName?: string;
-      inviteToken?: string;
-      bio?: string;
-      portfolioUrl?: string;
-      followerCount?: number;
-      adminCode?: string;
-    };
+  const {
+    role,
+    handle,
+    displayName,
+    inviteToken,
+    bio,
+    portfolioUrl,
+    followerCount,
+    adminCode,
+  } = req.body as {
+    role?: string;
+    handle?: string;
+    displayName?: string;
+    inviteToken?: string;
+    bio?: string;
+    portfolioUrl?: string;
+    followerCount?: number;
+    adminCode?: string;
+  };
 
   const email = authUser.email!;
-  const name = displayName ?? authUser.user_metadata?.full_name ?? authUser.user_metadata?.name ?? null;
+  const name =
+    displayName ??
+    authUser.user_metadata?.full_name ??
+    authUser.user_metadata?.name ??
+    null;
 
   // ── Buyer path (self-serve) — a handle is all a buyer needs ───────────────
   if (role === "buyer" && !inviteToken) {
     if (!handle) {
-      return res.status(400).json({ error: "handle is required for buyer accounts" });
+      return res
+        .status(400)
+        .json({ error: "handle is required for buyer accounts" });
     }
 
     const { data: takenHandle } = await supabaseAdmin
@@ -63,7 +82,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       .select("id")
       .eq("handle", handle)
       .single();
-    if (takenHandle) return res.status(409).json({ error: "Handle already taken" });
+    if (takenHandle)
+      return res.status(409).json({ error: "Handle already taken" });
 
     let buyerStripeCustomerId: string | null = null;
     try {
@@ -92,7 +112,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       .single();
 
     if (buyerErr) return res.status(500).json({ error: buyerErr.message });
-    return res.status(201).json({ user: formatUser(buyer as DbUser), isNew: true });
+    return res
+      .status(201)
+      .json({ user: formatUser(buyer as DbUser), isNew: true });
   }
 
   // ── Buyer path (legacy invite) — approved application → buyer account ──────
@@ -104,12 +126,19 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       .single();
 
     if (!application) {
-      return res.status(400).json({ error: "Invalid or expired invite token." });
+      return res
+        .status(400)
+        .json({ error: "Invalid or expired invite token." });
     }
 
     const app = application as DbBuyerApplication;
     if (app.status !== "approved") {
-      return res.status(400).json({ error: "This invite link has already been used or is no longer valid." });
+      return res
+        .status(400)
+        .json({
+          error:
+            "This invite link has already been used or is no longer valid.",
+        });
     }
 
     // Stripe Customer for charging
@@ -147,12 +176,17 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       .update({ invite_token: null })
       .eq("id", app.id);
 
-    return res.status(201).json({ user: formatUser(profile as DbUser), isNew: true });
+    return res
+      .status(201)
+      .json({ user: formatUser(profile as DbUser), isNew: true });
   }
 
   // ── Photographer path ────────────────────────────────────────────────────
   if (role === "photographer") {
-    if (!handle) return res.status(400).json({ error: "handle is required for photographer accounts" });
+    if (!handle)
+      return res
+        .status(400)
+        .json({ error: "handle is required for photographer accounts" });
 
     const { data: taken } = await supabaseAdmin
       .from("users")
@@ -163,7 +197,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     let stripeAccountId: string | null = null;
     try {
-      const account = await createConnectAccount(email, name ?? undefined, handle);
+      const account = await createConnectAccount(
+        email,
+        name ?? undefined,
+        handle,
+      );
       stripeAccountId = account.id;
     } catch {
       // Non-fatal in dev
@@ -181,7 +219,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         portfolio_url: portfolioUrl ?? null,
         follower_count: followerCount ?? 0,
         stripe_account_id: stripeAccountId,
-        stripe_account_status: stripeAccountId ? "pending_onboarding" : "pending",
+        stripe_account_status: stripeAccountId
+          ? "pending_onboarding"
+          : "pending",
         verified: false, // legacy; selling is gated by sell_status
         sell_status: "pending", // admin reviews before they can list
         bid_status: "none",
@@ -190,7 +230,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       .single();
 
     if (profileErr) return res.status(500).json({ error: profileErr.message });
-    return res.status(201).json({ user: formatUser(profile as DbUser), isNew: true });
+    return res
+      .status(201)
+      .json({ user: formatUser(profile as DbUser), isNew: true });
   }
 
   // ── Admin path — self-registration via the private /mission-control page ──
@@ -199,7 +241,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     // adminCode. Without it set (dev), the obscure URL is the only gate.
     const requiredCode = process.env.ADMIN_SIGNUP_SECRET;
     if (requiredCode && adminCode !== requiredCode) {
-      return res.status(403).json({ error: "Invalid admin registration code." });
+      return res
+        .status(403)
+        .json({ error: "Invalid admin registration code." });
     }
 
     const { data: profile, error: profileErr } = await supabaseAdmin
@@ -220,11 +264,14 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       .single();
 
     if (profileErr) return res.status(500).json({ error: profileErr.message });
-    return res.status(201).json({ user: formatUser(profile as DbUser), isNew: true });
+    return res
+      .status(201)
+      .json({ user: formatUser(profile as DbUser), isNew: true });
   }
 
   return res.status(400).json({
-    error: "role is required for new accounts. Pass 'buyer', 'photographer', or 'admin'.",
+    error:
+      "role is required for new accounts. Pass 'buyer', 'photographer', or 'admin'.",
   });
 }
 

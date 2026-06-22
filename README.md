@@ -3,7 +3,7 @@
 ## API Endpoints
 
 | Method(s) | Path | Description |
-|---|---|---|
+| --- | --- | --- |
 | GET | `/api` | API welcome message |
 | GET, POST | `/api/auctions` | List auctions / create auction |
 | GET, PATCH, DELETE | `/api/auctions/[id]` | Auction detail / update / cancel |

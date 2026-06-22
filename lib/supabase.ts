@@ -40,7 +40,9 @@ function lazy(getter: () => SupabaseClient): SupabaseClient {
 export const supabase = lazy(getAnon);
 export const supabaseAdmin = lazy(getAdmin);
 
-export async function getUserFromRequest(req: NextApiRequest): Promise<DbUser | null> {
+export async function getUserFromRequest(
+  req: NextApiRequest,
+): Promise<DbUser | null> {
   // Dev bypass — allows testing with seeded fake emails without OAuth.
   // Never active in production; gated by both NODE_ENV and a header so it
   // can't be triggered accidentally even in staging.
@@ -84,7 +86,9 @@ export function formatUser(profile: DbUser) {
     canBid: (profile.bid_status ?? "none") === "verified",
     canSell: (profile.sell_status ?? "none") === "verified",
     stripeStatus: profile.stripe_account_status ?? "pending",
-    ...(profile.follower_count ? { followerCount: profile.follower_count } : {}),
+    ...(profile.follower_count
+      ? { followerCount: profile.follower_count }
+      : {}),
     ...(profile.bio ? { bio: profile.bio } : {}),
     ...(profile.portfolio_url ? { portfolioUrl: profile.portfolio_url } : {}),
   };
@@ -101,7 +105,11 @@ interface StatusError extends Error {
 
 export async function supabaseQuery<T>(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  queryPromise: PromiseLike<{ data: T | null; error: any; count: number | null }>,
+  queryPromise: PromiseLike<{
+    data: T | null;
+    error: any;
+    count: number | null;
+  }>,
 ): Promise<SupabaseQueryResult<T>> {
   const { data, error, count } = await queryPromise;
   if (error && error.code !== "PGRST116") {
@@ -118,7 +126,11 @@ interface GetAllUsersOptions {
   offset?: number;
 }
 
-export async function getAllUsers({ role, limit = 50, offset = 0 }: GetAllUsersOptions = {}) {
+export async function getAllUsers({
+  role,
+  limit = 50,
+  offset = 0,
+}: GetAllUsersOptions = {}) {
   let query = supabaseAdmin
     .from("users")
     .select(

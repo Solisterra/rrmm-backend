@@ -1,7 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withErrorHandling } from "../../../lib/api";
 import { getUserFromRequest, supabaseAdmin } from "../../../lib/supabase";
-import { createConnectOnboardingLink, createCheckoutSession } from "../../../lib/stripe";
+import {
+  createConnectOnboardingLink,
+  createCheckoutSession,
+} from "../../../lib/stripe";
 import type { DbUser, DbAuction } from "../../../lib/types";
 
 // First configured frontend origin — where Checkout redirects the buyer back to.
@@ -55,8 +58,10 @@ async function createCheckout(req: NextApiRequest, res: NextApiResponse) {
   if (!auction) return res.status(404).json({ error: "Auction not found" });
 
   const a = auction as DbAuction & { users?: { stripe_account_id?: string } };
-  if (a.buyer_id !== u.id) return res.status(403).json({ error: "You did not win this auction" });
-  if (a.status !== "sold") return res.status(400).json({ error: "Auction not yet closed" });
+  if (a.buyer_id !== u.id)
+    return res.status(403).json({ error: "You did not win this auction" });
+  if (a.status !== "sold")
+    return res.status(400).json({ error: "Auction not yet closed" });
 
   const origin = frontendOrigin();
   const session = await createCheckoutSession({

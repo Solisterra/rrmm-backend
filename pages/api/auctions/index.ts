@@ -21,17 +21,22 @@ async function getAuctions(req: NextApiRequest, res: NextApiResponse) {
 
   let query = supabaseAdmin
     .from("auctions")
-    .select("*, users!photographer_id(handle, display_name, avatar_url, verified)")
+    .select(
+      "*, users!photographer_id(handle, display_name, avatar_url, verified)",
+    )
     .eq("status", status as AuctionStatus)
     .order(sort, { ascending: sort === "ends_at" })
-    .range(parseInt(String(offset)), parseInt(String(offset)) + parseInt(String(limit)) - 1);
+    .range(
+      parseInt(String(offset)),
+      parseInt(String(offset)) + parseInt(String(limit)) - 1,
+    );
 
   if (category) query = query.eq("category", category);
 
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
 
-  const auctions = (data as DbAuction[] | null ?? []).map((row) => {
+  const auctions = ((data as DbAuction[] | null) ?? []).map((row) => {
     const { full_url: _full_url, ...rest } = formatAuction(row);
     return rest;
   });
@@ -49,8 +54,13 @@ async function createAuction(req: NextApiRequest, res: NextApiResponse) {
   const user = await getUserFromRequest(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
   // Anyone with a verified seller capability can list; admins are exempt.
-  if ((user as DbUser).role !== "admin" && (user as DbUser).sell_status !== "verified")
-    return res.status(403).json({ error: "Seller verification required to create listings" });
+  if (
+    (user as DbUser).role !== "admin" &&
+    (user as DbUser).sell_status !== "verified"
+  )
+    return res
+      .status(403)
+      .json({ error: "Seller verification required to create listings" });
 
   const {
     title,
@@ -82,7 +92,14 @@ async function createAuction(req: NextApiRequest, res: NextApiResponse) {
     attestation?: AttestationPayload;
   };
 
-  if (!title || !category || !content_type || !exclusivity || !preview_url || !reserve_price) {
+  if (
+    !title ||
+    !category ||
+    !content_type ||
+    !exclusivity ||
+    !preview_url ||
+    !reserve_price
+  ) {
     return res.status(400).json({ error: "Missing required content fields" });
   }
   if (reserve_price < 25) {
@@ -95,16 +112,28 @@ async function createAuction(req: NextApiRequest, res: NextApiResponse) {
   if (!attestation) {
     return res.status(400).json({
       error: "Ownership attestation required",
-      detail: "All four attestation confirmations must be submitted with every listing.",
+      detail:
+        "All four attestation confirmations must be submitted with every listing.",
     });
   }
 
-  const { confirmed_ownership, confirmed_unpublished, confirmed_no_third_party, confirmed_consequences } = attestation;
+  const {
+    confirmed_ownership,
+    confirmed_unpublished,
+    confirmed_no_third_party,
+    confirmed_consequences,
+  } = attestation;
 
-  if (!confirmed_ownership || !confirmed_unpublished || !confirmed_no_third_party || !confirmed_consequences) {
+  if (
+    !confirmed_ownership ||
+    !confirmed_unpublished ||
+    !confirmed_no_third_party ||
+    !confirmed_consequences
+  ) {
     return res.status(400).json({
       error: "Incomplete attestation",
-      detail: "All four ownership confirmations must be true. Listing rejected.",
+      detail:
+        "All four ownership confirmations must be true. Listing rejected.",
       missing: {
         confirmed_ownership: !confirmed_ownership,
         confirmed_unpublished: !confirmed_unpublished,
@@ -138,7 +167,10 @@ async function createAuction(req: NextApiRequest, res: NextApiResponse) {
   if (auctionErr) return res.status(500).json({ error: auctionErr.message });
 
   const auctionRow = auction as { id: string };
-  const ipAddress = (req.headers["x-forwarded-for"] as string) || req.socket?.remoteAddress || "unknown";
+  const ipAddress =
+    (req.headers["x-forwarded-for"] as string) ||
+    req.socket?.remoteAddress ||
+    "unknown";
   const userAgent = req.headers["user-agent"] || "unknown";
   const sessionId = req.headers["x-session-id"] as string | undefined;
 
@@ -168,7 +200,11 @@ async function createAuction(req: NextApiRequest, res: NextApiResponse) {
     });
   }
 
-  const ar = attestRecord as { id: string; attested_at: string; attestation_version: string };
+  const ar = attestRecord as {
+    id: string;
+    attested_at: string;
+    attestation_version: string;
+  };
 
   await supabaseAdmin
     .from("auctions")
@@ -182,7 +218,8 @@ async function createAuction(req: NextApiRequest, res: NextApiResponse) {
       attested_at: ar.attested_at,
       version: ar.attestation_version,
     },
-    message: "Listing submitted for review. Attestation recorded. Typically approved within 15 minutes.",
+    message:
+      "Listing submitted for review. Attestation recorded. Typically approved within 15 minutes.",
   });
 }
 

@@ -1,8 +1,15 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withErrorHandling } from "../../../lib/api";
-import { supabaseAdmin, getUserFromRequest, supabaseQuery } from "../../../lib/supabase";
+import {
+  supabaseAdmin,
+  getUserFromRequest,
+  supabaseQuery,
+} from "../../../lib/supabase";
 import { activateAuction } from "../../../lib/auction-engine";
-import { notifyContentApproved, notifyContentRejected } from "../../../lib/notifications";
+import {
+  notifyContentApproved,
+  notifyContentRejected,
+} from "../../../lib/notifications";
 import { formatAuction } from "../../../lib/format";
 import type { DbUser, DbAuction, ContentDecision } from "../../../lib/types";
 
@@ -15,11 +22,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const { data } = await supabaseQuery(
       supabaseAdmin
         .from("auctions")
-        .select("*, users!photographer_id(handle, display_name, email, total_sales, verified)")
+        .select(
+          "*, users!photographer_id(handle, display_name, email, total_sales, verified)",
+        )
         .eq("status", "pending")
         .order("created_at", { ascending: true }),
     );
-    const pending = (data as DbAuction[] || []).map(formatAuction);
+    const pending = ((data as DbAuction[]) || []).map(formatAuction);
     return res.status(200).json({ pending, count: pending.length });
   }
 
@@ -51,16 +60,32 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     if (decision === "approved") {
       await activateAuction(auctionId!);
-      await notifyContentApproved({ photographerId: a.photographer_id, auctionId: auctionId! });
-      return res.status(200).json({ success: true, message: "Auction activated and buyers notified" });
+      await notifyContentApproved({
+        photographerId: a.photographer_id,
+        auctionId: auctionId!,
+      });
+      return res
+        .status(200)
+        .json({
+          success: true,
+          message: "Auction activated and buyers notified",
+        });
     } else {
-      await supabaseAdmin.from("auctions").update({ status: "cancelled" }).eq("id", auctionId);
+      await supabaseAdmin
+        .from("auctions")
+        .update({ status: "cancelled" })
+        .eq("id", auctionId);
       await notifyContentRejected({
         photographerId: a.photographer_id,
         auctionId: auctionId!,
         reason: notes || "Content did not meet platform standards",
       });
-      return res.status(200).json({ success: true, message: "Auction rejected and photographer notified" });
+      return res
+        .status(200)
+        .json({
+          success: true,
+          message: "Auction rejected and photographer notified",
+        });
     }
   }
 

@@ -1,6 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withErrorHandling } from "../../../lib/api";
-import { supabaseAdmin, getUserFromRequest, supabaseQuery } from "../../../lib/supabase";
+import {
+  supabaseAdmin,
+  getUserFromRequest,
+  supabaseQuery,
+} from "../../../lib/supabase";
 import type { DbUser, DbAuction } from "../../../lib/types";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -11,21 +15,31 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   return res.status(405).json({ error: "Method not allowed" });
 }
 
-async function getAuction(req: NextApiRequest, res: NextApiResponse, id: string) {
+async function getAuction(
+  req: NextApiRequest,
+  res: NextApiResponse,
+  id: string,
+) {
   const user = await getUserFromRequest(req);
 
   const { data: auction, error } = await supabaseAdmin
     .from("auctions")
-    .select(`*,
+    .select(
+      `*,
       users!photographer_id(id, handle, display_name, avatar_url, total_sales),
-      bids(id, amount, bidder_id, is_winning, created_at, users!bidder_id(handle, display_name))`)
+      bids(id, amount, bidder_id, is_winning, created_at, users!bidder_id(handle, display_name))`,
+    )
     .eq("id", id)
     .single();
 
-  if (error || !auction) return res.status(404).json({ error: "Auction not found" });
+  if (error || !auction)
+    return res.status(404).json({ error: "Auction not found" });
 
   const a = auction as DbAuction;
-  await supabaseAdmin.from("auctions").update({ view_count: a.view_count + 1 }).eq("id", id);
+  await supabaseAdmin
+    .from("auctions")
+    .update({ view_count: a.view_count + 1 })
+    .eq("id", id);
 
   const isBuyer = (user as DbUser | null)?.id === a.buyer_id;
   const hasPaid = a.status === "sold";
@@ -44,7 +58,11 @@ async function getAuction(req: NextApiRequest, res: NextApiResponse, id: string)
   return res.status(200).json({ auction: response });
 }
 
-async function updateAuction(req: NextApiRequest, res: NextApiResponse, id: string) {
+async function updateAuction(
+  req: NextApiRequest,
+  res: NextApiResponse,
+  id: string,
+) {
   const user = await getUserFromRequest(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
 
@@ -61,8 +79,13 @@ async function updateAuction(req: NextApiRequest, res: NextApiResponse, id: stri
   if (a.status === "active" && !isAdmin)
     return res.status(400).json({ error: "Cannot edit active auction" });
 
-  const allowedFields = ["title", "description", "event_tag", "is_featured"] as const;
-  const updates: Partial<Record<typeof allowedFields[number], unknown>> = {};
+  const allowedFields = [
+    "title",
+    "description",
+    "event_tag",
+    "is_featured",
+  ] as const;
+  const updates: Partial<Record<(typeof allowedFields)[number], unknown>> = {};
   for (const field of allowedFields) {
     if (req.body[field] !== undefined) updates[field] = req.body[field];
   }
@@ -77,7 +100,11 @@ async function updateAuction(req: NextApiRequest, res: NextApiResponse, id: stri
   return res.status(200).json({ auction: data });
 }
 
-async function cancelAuction(req: NextApiRequest, res: NextApiResponse, id: string) {
+async function cancelAuction(
+  req: NextApiRequest,
+  res: NextApiResponse,
+  id: string,
+) {
   const user = await getUserFromRequest(req);
   if (!user || (user as DbUser).role !== "admin")
     return res.status(403).json({ error: "Admin only" });
@@ -89,7 +116,10 @@ async function cancelAuction(req: NextApiRequest, res: NextApiResponse, id: stri
   if ((auction as DbAuction).status === "sold")
     return res.status(400).json({ error: "Cannot cancel a sold auction" });
 
-  await supabaseAdmin.from("auctions").update({ status: "cancelled" }).eq("id", id);
+  await supabaseAdmin
+    .from("auctions")
+    .update({ status: "cancelled" })
+    .eq("id", id);
   return res.status(200).json({ success: true });
 }
 

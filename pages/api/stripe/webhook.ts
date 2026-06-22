@@ -23,7 +23,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   let event: Stripe.Event;
   try {
-    event = getStripe().webhooks.constructEvent(buf, sig, process.env.STRIPE_WEBHOOK_SECRET!);
+    event = getStripe().webhooks.constructEvent(
+      buf,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET!,
+    );
   } catch (err) {
     console.error("Webhook signature failed:", (err as Error).message);
     return res.status(400).send(`Webhook Error: ${(err as Error).message}`);
@@ -88,12 +92,20 @@ async function handlePaymentSucceeded(paymentIntent: Stripe.PaymentIntent) {
       .createSignedUrl(a.full_url, 60 * 60 * 24 * 7);
 
     if (signErr || !signedUrl) {
-      console.error(`Could not sign full_url for auction ${auctionId}:`, signErr?.message);
+      console.error(
+        `Could not sign full_url for auction ${auctionId}:`,
+        signErr?.message,
+      );
     } else {
-      await supabaseAdmin.from("auctions").update({ rights_transferred: true }).eq("id", auctionId);
+      await supabaseAdmin
+        .from("auctions")
+        .update({ rights_transferred: true })
+        .eq("id", auctionId);
     }
   } else {
-    console.error(`Auction ${auctionId} has no full_url; cannot deliver content.`);
+    console.error(
+      `Auction ${auctionId} has no full_url; cannot deliver content.`,
+    );
   }
 
   await supabaseAdmin.from("notifications").insert({
@@ -117,12 +129,19 @@ async function handlePaymentSucceeded(paymentIntent: Stripe.PaymentIntent) {
     // this payment. Do NOT create a second transfer here — just record that the
     // payout went out and notify them. (The transfer.created webhook reconciles
     // the final settled state.)
-    await supabaseAdmin.from("transactions").update({
-      payout_status: "in_transit",
-      payout_initiated_at: new Date().toISOString(),
-    }).eq("auction_id", auctionId);
+    await supabaseAdmin
+      .from("transactions")
+      .update({
+        payout_status: "in_transit",
+        payout_initiated_at: new Date().toISOString(),
+      })
+      .eq("auction_id", auctionId);
 
-    await notifyPaymentReceived({ photographerId: p.id, auctionId, amount: a.photographer_payout! });
+    await notifyPaymentReceived({
+      photographerId: p.id,
+      auctionId,
+      amount: a.photographer_payout!,
+    });
   }
 }
 
@@ -133,14 +152,20 @@ async function handlePaymentFailed(paymentIntent: Stripe.PaymentIntent) {
     .from("transactions")
     .update({ payment_status: "failed", payment_intent_id: paymentIntent.id })
     .eq("auction_id", auctionId);
-  console.error(`Payment failed for auction ${auctionId}:`, paymentIntent.last_payment_error?.message);
+  console.error(
+    `Payment failed for auction ${auctionId}:`,
+    paymentIntent.last_payment_error?.message,
+  );
 }
 
 async function handleTransferCreated(transfer: Stripe.Transfer) {
-  await supabaseAdmin.from("transactions").update({
-    payout_status: "paid",
-    payout_completed_at: new Date().toISOString(),
-  }).eq("payout_id", transfer.id);
+  await supabaseAdmin
+    .from("transactions")
+    .update({
+      payout_status: "paid",
+      payout_completed_at: new Date().toISOString(),
+    })
+    .eq("payout_id", transfer.id);
 }
 
 async function handlePayoutPaid(payout: Stripe.Payout) {
@@ -148,8 +173,14 @@ async function handlePayoutPaid(payout: Stripe.Payout) {
 }
 
 async function handleAccountUpdated(account: Stripe.Account) {
-  const status = account.details_submitted && account.charges_enabled ? "active" : "restricted";
-  await supabaseAdmin.from("users").update({ stripe_account_status: status }).eq("stripe_account_id", account.id);
+  const status =
+    account.details_submitted && account.charges_enabled
+      ? "active"
+      : "restricted";
+  await supabaseAdmin
+    .from("users")
+    .update({ stripe_account_status: status })
+    .eq("stripe_account_id", account.id);
 }
 
 export default withErrorHandling(handler);

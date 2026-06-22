@@ -14,7 +14,11 @@ import type {
 
 // First configured frontend origin — emails must link to the SPA, not the API.
 function appOrigin(): string {
-  return (process.env.FRONTEND_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:5173")
+  return (
+    process.env.FRONTEND_URL ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    "http://localhost:5173"
+  )
     .split(",")
     .map((o) => o.trim())
     .filter(Boolean)[0];
@@ -59,7 +63,8 @@ async function createNotification({
       body,
       auction_id: auctionId,
     });
-    if (error) console.error(`Notification insert failed (${type}):`, error.message);
+    if (error)
+      console.error(`Notification insert failed (${type}):`, error.message);
   } catch (e) {
     console.error(`Notification insert threw (${type}):`, (e as Error).message);
   }
@@ -79,7 +84,11 @@ async function createNotification({
     }
   }
 
-  if (sendEmail && process.env.SENDGRID_API_KEY && (user as { email?: string }).email) {
+  if (
+    sendEmail &&
+    process.env.SENDGRID_API_KEY &&
+    (user as { email?: string }).email
+  ) {
     try {
       const sg = getSendGrid();
       await sg.send({
@@ -111,7 +120,11 @@ function emailTemplate(title: string, body: string): string {
     </div>`;
 }
 
-export async function notifyOutbid({ bidderId, auctionId, newBid }: NotifyOutbidParams): Promise<void> {
+export async function notifyOutbid({
+  bidderId,
+  auctionId,
+  newBid,
+}: NotifyOutbidParams): Promise<void> {
   const { data: auction } = await supabaseAdmin
     .from("auctions")
     .select("title")
@@ -127,7 +140,11 @@ export async function notifyOutbid({ bidderId, auctionId, newBid }: NotifyOutbid
   });
 }
 
-export async function notifyAuctionWon({ bidderId, auctionId, amount }: NotifyAuctionWonParams): Promise<void> {
+export async function notifyAuctionWon({
+  bidderId,
+  auctionId,
+  amount,
+}: NotifyAuctionWonParams): Promise<void> {
   const { data: auction } = await supabaseAdmin
     .from("auctions")
     .select("title")
@@ -143,7 +160,10 @@ export async function notifyAuctionWon({ bidderId, auctionId, amount }: NotifyAu
   });
 }
 
-export async function notifyAuctionLost({ bidderId, auctionId }: NotifyAuctionLostParams): Promise<void> {
+export async function notifyAuctionLost({
+  bidderId,
+  auctionId,
+}: NotifyAuctionLostParams): Promise<void> {
   const { data: auction } = await supabaseAdmin
     .from("auctions")
     .select("title")
@@ -162,7 +182,11 @@ export async function notifyAuctionLost({ bidderId, auctionId }: NotifyAuctionLo
 // Seller-facing, sent the moment their auction closes with a winning bid (before
 // the buyer pays). The matching "you've been paid" email fires later via
 // notifyPaymentReceived once payment settles.
-export async function notifyAuctionSold({ photographerId, auctionId, amount }: NotifyAuctionSoldParams): Promise<void> {
+export async function notifyAuctionSold({
+  photographerId,
+  auctionId,
+  amount,
+}: NotifyAuctionSoldParams): Promise<void> {
   const { data: auction } = await supabaseAdmin
     .from("auctions")
     .select("title")
@@ -178,7 +202,11 @@ export async function notifyAuctionSold({ photographerId, auctionId, amount }: N
   });
 }
 
-export async function notifyPaymentReceived({ photographerId, auctionId, amount }: NotifyPaymentReceivedParams): Promise<void> {
+export async function notifyPaymentReceived({
+  photographerId,
+  auctionId,
+  amount,
+}: NotifyPaymentReceivedParams): Promise<void> {
   const { data: auction } = await supabaseAdmin
     .from("auctions")
     .select("title")
@@ -194,7 +222,10 @@ export async function notifyPaymentReceived({ photographerId, auctionId, amount 
   });
 }
 
-export async function notifyWatchlistUrgent({ auctionId, minutesLeft }: NotifyWatchlistUrgentParams): Promise<void> {
+export async function notifyWatchlistUrgent({
+  auctionId,
+  minutesLeft,
+}: NotifyWatchlistUrgentParams): Promise<void> {
   const { data: auction } = await supabaseAdmin
     .from("auctions")
     .select("title, current_bid")
@@ -216,7 +247,10 @@ export async function notifyWatchlistUrgent({ auctionId, minutesLeft }: NotifyWa
   }
 }
 
-export async function notifyContentApproved({ photographerId, auctionId }: NotifyContentParams): Promise<void> {
+export async function notifyContentApproved({
+  photographerId,
+  auctionId,
+}: NotifyContentParams): Promise<void> {
   const { data: auction } = await supabaseAdmin
     .from("auctions")
     .select("title")
@@ -232,7 +266,11 @@ export async function notifyContentApproved({ photographerId, auctionId }: Notif
   });
 }
 
-export async function notifyContentRejected({ photographerId, auctionId, reason }: NotifyContentParams): Promise<void> {
+export async function notifyContentRejected({
+  photographerId,
+  auctionId,
+  reason,
+}: NotifyContentParams): Promise<void> {
   const { data: auction } = await supabaseAdmin
     .from("auctions")
     .select("title")

@@ -1,8 +1,17 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withErrorHandling } from "../../../lib/api";
-import { supabaseAdmin, getUserFromRequest, supabaseQuery } from "../../../lib/supabase";
+import {
+  supabaseAdmin,
+  getUserFromRequest,
+  supabaseQuery,
+} from "../../../lib/supabase";
 import { formatAuction } from "../../../lib/format";
-import type { DbUser, DbAuction, DbBid, DbTransaction } from "../../../lib/types";
+import type {
+  DbUser,
+  DbAuction,
+  DbBid,
+  DbTransaction,
+} from "../../../lib/types";
 
 // GET /api/users/bids — the signed-in buyer's auction activity:
 //   won    — auctions they won (status 'sold'), with payment status and, once
@@ -64,7 +73,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   );
 
   // ── Active auctions the buyer is bidding on ─────────────────────────────────
-  const { data: myBids } = await supabaseQuery<Pick<DbBid, "auction_id" | "amount" | "is_winning">[]>(
+  const { data: myBids } = await supabaseQuery<
+    Pick<DbBid, "auction_id" | "amount" | "is_winning">[]
+  >(
     supabaseAdmin
       .from("bids")
       .select("auction_id, amount, is_winning")

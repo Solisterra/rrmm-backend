@@ -4,7 +4,8 @@ import { supabase, formatUser } from "../../../../lib/supabase";
 import { findOrLinkUser } from "../../../../lib/syncUser";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "POST only" });
 
   const { email, code } = req.body as { email?: string; code?: string };
   if (!email || !code) {
@@ -21,7 +22,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   });
 
   if (error || !data.session || !data.user) {
-    return res.status(401).json({ error: error?.message ?? "Invalid or expired code" });
+    return res
+      .status(401)
+      .json({ error: error?.message ?? "Invalid or expired code" });
   }
 
   const { session, user: authUser } = data;

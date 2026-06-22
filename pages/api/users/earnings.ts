@@ -1,6 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withErrorHandling } from "../../../lib/api";
-import { supabaseAdmin, getUserFromRequest, supabaseQuery } from "../../../lib/supabase";
+import {
+  supabaseAdmin,
+  getUserFromRequest,
+  supabaseQuery,
+} from "../../../lib/supabase";
 import type { DbUser, DbTransaction } from "../../../lib/types";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -23,7 +27,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   for (const tx of (transactions as DbTransaction[]) || []) {
     if (tx.payout_status !== "paid") continue;
     const month = tx.created_at.slice(0, 7);
-    monthly[month] = (monthly[month] ?? 0) + parseFloat(String(tx.photographer_payout));
+    monthly[month] =
+      (monthly[month] ?? 0) + parseFloat(String(tx.photographer_payout));
   }
 
   const pending = ((transactions as DbTransaction[]) || [])
@@ -43,7 +48,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       totalEarned: u.total_earned ?? 0,
       totalSales: u.total_sales ?? 0,
       pendingPayout: pending,
-      avgSaleNet: u.total_sales > 0 ? (u.total_earned / u.total_sales).toFixed(2) : 0,
+      avgSaleNet:
+        u.total_sales > 0 ? (u.total_earned / u.total_sales).toFixed(2) : 0,
     },
     monthly,
     transactions: transactions || [],

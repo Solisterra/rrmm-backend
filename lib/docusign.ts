@@ -16,7 +16,10 @@ async function getApiClient() {
     Buffer.from(privateKey),
     3600,
   );
-  apiClient.addDefaultHeader("Authorization", `Bearer ${tokenResp.body.access_token}`);
+  apiClient.addDefaultHeader(
+    "Authorization",
+    `Bearer ${tokenResp.body.access_token}`,
+  );
   return apiClient;
 }
 
@@ -55,7 +58,10 @@ async function executeRightsTransfer({
         textTabs: [
           { tabLabel: "listing_title", value: listingTitle },
           { tabLabel: "sale_price", value: `$${salePrice.toLocaleString()}` },
-          { tabLabel: "exclusivity_terms", value: exclusivityText[exclusiveTier] ?? exclusiveTier },
+          {
+            tabLabel: "exclusivity_terms",
+            value: exclusivityText[exclusiveTier] ?? exclusiveTier,
+          },
           { tabLabel: "transaction_id", value: transactionId },
           {
             tabLabel: "execution_date",
@@ -86,7 +92,9 @@ async function executeRightsTransfer({
   return { envelopeId: result.envelopeId, status: result.status };
 }
 
-async function checkEnvelopeStatus(envelopeId: string): Promise<{ status: string; completedAt: string }> {
+async function checkEnvelopeStatus(
+  envelopeId: string,
+): Promise<{ status: string; completedAt: string }> {
   const apiClient = await getApiClient();
   const envelopesApi = new EnvelopesApi(apiClient);
   const envelope = await envelopesApi.getEnvelope(
