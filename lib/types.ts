@@ -9,7 +9,11 @@ export type AuctionStatus =
   | "closing"
   | "sold"
   | "unsold"
-  | "cancelled";
+  | "cancelled"
+  | "marketplace"
+  | "archived";
+// Self-service marketplace tier vs full verify-to-bid auction buyer.
+export type BuyerTier = "marketplace" | "verified";
 export type AuctionCategory =
   | "Launch Event"
   | "Test Event"
@@ -60,6 +64,7 @@ export interface DbUser {
   display_name: string | null;
   role: Role;
   verified: boolean;
+  buyer_tier: BuyerTier;
   bid_status: CapabilityStatus;
   sell_status: CapabilityStatus;
   follower_count: number;
@@ -93,6 +98,9 @@ export interface DbAuction {
   duration_secs: number | null;
   status: AuctionStatus;
   reserve_price: number;
+  fallback_price: number | null;
+  marketplace_since: string | null;
+  license_count: number;
   duration_hours: number;
   starts_at: string | null;
   ends_at: string | null;
@@ -152,6 +160,24 @@ export interface DbTransaction {
   updated_at: string;
   auctions?: Partial<DbAuction>;
   buyer?: Partial<DbUser>;
+}
+
+// Immutable, audited record of a buyer accepting the non-exclusive license at
+// purchase. Many per content (one per marketplace sale) — links to transaction_id;
+// there is intentionally no back-reference column on auctions. Cloned from the
+// attestations pattern. See supabase/content_lifecycle_migration.sql.
+export interface DbLicenseAcceptance {
+  id: string;
+  buyer_id: string;
+  content_id: string;
+  transaction_id: string;
+  agreement_accepted: boolean;
+  accepted_at: string;
+  ip_address: string | null;
+  user_agent: string | null;
+  session_id: string | null;
+  license_version: string;
+  legal_text_snapshot: string;
 }
 
 export interface PlatformEntry {
