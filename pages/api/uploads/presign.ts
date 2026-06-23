@@ -1,6 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withErrorHandling } from "../../../lib/api";
-import { supabaseAdmin, getUserFromRequest } from "../../../lib/supabase";
+import { getUserFromRequest } from "../../../lib/supabase";
+import {
+  storage,
+  StorageError,
+  PREVIEW_BUCKET,
+  FULLRES_BUCKET,
+} from "../../../lib/storage";
 import { v4 as uuidv4 } from "uuid";
 import type { DbUser } from "../../../lib/types";
 
@@ -50,40 +56,35 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   const fileId = uuidv4();
   const filePath = `${u.id}/${fileId}.${ext}`;
 
-  const [previewSigned, fullSigned] = await Promise.all([
-    supabaseAdmin.storage
-      .from("previews")
-      .createSignedUploadUrl(filePath, { upsert: true }),
-    supabaseAdmin.storage
-      .from("fullres")
-      .createSignedUploadUrl(filePath, { upsert: true }),
-  ]);
-
-  if (previewSigned.error || fullSigned.error) {
-    const err = previewSigned.error ?? fullSigned.error;
+  let previewTarget, fullTarget;
+  try {
+    [previewTarget, fullTarget] = await Promise.all([
+      storage.createUploadUrl(PREVIEW_BUCKET, filePath),
+      storage.createUploadUrl(FULLRES_BUCKET, filePath),
+    ]);
+  } catch (e) {
+    const err = e as StorageError;
     return res.status(500).json({
-      error: `Failed to generate upload URLs: ${err?.message}`,
-      bucket: previewSigned.error ? "previews" : "fullres",
+      error: `Failed to generate upload URLs: ${err.message}`,
+      bucket: err.bucket,
     });
   }
 
-  const { data: previewPublic } = supabaseAdmin.storage
-    .from("previews")
-    .getPublicUrl(filePath);
+  const publicUrl = storage.getPublicUrl(PREVIEW_BUCKET, filePath);
 
   return res.status(200).json({
     fileId,
     filePath,
     preview: {
-      signedUrl: previewSigned.data.signedUrl,
-      path: previewSigned.data.path,
-      token: previewSigned.data.token,
-      publicUrl: previewPublic.publicUrl,
+      signedUrl: previewTarget.signedUrl,
+      path: previewTarget.path,
+      token: previewTarget.token,
+      publicUrl,
     },
     fullres: {
-      signedUrl: fullSigned.data.signedUrl,
-      path: fullSigned.data.path,
-      token: fullSigned.data.token,
+      signedUrl: fullTarget.signedUrl,
+      path: fullTarget.path,
+      token: fullTarget.token,
     },
     instructions:
       "Either (a) supabase.storage.from(bucket).uploadToSignedUrl(path, token, file), " +

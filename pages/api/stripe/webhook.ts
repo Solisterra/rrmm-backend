@@ -3,6 +3,7 @@ import { withErrorHandling } from "../../../lib/api";
 import { buffer } from "micro";
 import Stripe from "stripe";
 import { supabaseAdmin } from "../../../lib/supabase";
+import { storage } from "../../../lib/storage";
 import { notifyPaymentReceived } from "../../../lib/notifications";
 import type { DbAuction, DbUser } from "../../../lib/types";
 
@@ -87,15 +88,10 @@ async function handlePaymentSucceeded(paymentIntent: Stripe.PaymentIntent) {
   // `filePath` = `${photographer_id}/${fileId}.${ext}`). Sign that exact path —
   // reconstructing it from the auction id does not match what was uploaded.
   if (a.full_url) {
-    const { data: signedUrl, error: signErr } = await supabaseAdmin.storage
-      .from("fullres")
-      .createSignedUrl(a.full_url, 60 * 60 * 24 * 7);
+    const signedUrl = await storage.createDownloadUrl(a.full_url);
 
-    if (signErr || !signedUrl) {
-      console.error(
-        `Could not sign full_url for auction ${auctionId}:`,
-        signErr?.message,
-      );
+    if (!signedUrl) {
+      console.error(`Could not sign full_url for auction ${auctionId}`);
     } else {
       await supabaseAdmin
         .from("auctions")

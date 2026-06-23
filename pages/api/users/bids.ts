@@ -5,6 +5,7 @@ import {
   getUserFromRequest,
   supabaseQuery,
 } from "../../../lib/supabase";
+import { storage } from "../../../lib/storage";
 import { formatAuction } from "../../../lib/format";
 import type {
   DbUser,
@@ -55,10 +56,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       // Only hand back a download link after payment has settled.
       let downloadUrl: string | null = null;
       if (paid && row.full_url) {
-        const { data: signed } = await supabaseAdmin.storage
-          .from("fullres")
-          .createSignedUrl(row.full_url, 60 * 60 * 24 * 7);
-        downloadUrl = signed?.signedUrl ?? null;
+        downloadUrl = await storage.createDownloadUrl(row.full_url);
       }
 
       const { full_url: _full, ...formatted } = formatAuction(row);
