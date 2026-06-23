@@ -5,6 +5,7 @@ import {
   getUserFromRequest,
   supabaseQuery,
 } from "../../../lib/supabase";
+import { storage } from "../../../lib/storage";
 import type { DbUser, DbAuction } from "../../../lib/types";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -47,10 +48,7 @@ async function getAuction(
   // `full_url` is a private-bucket path, not downloadable as-is. Only the paying
   // buyer gets a short-lived signed download URL; everyone else gets nothing.
   if (isBuyer && hasPaid && a.full_url) {
-    const { data: signed } = await supabaseAdmin.storage
-      .from("fullres")
-      .createSignedUrl(a.full_url, 60 * 60 * 24 * 7);
-    response.full_url = signed?.signedUrl ?? null;
+    response.full_url = await storage.createDownloadUrl(a.full_url);
   } else {
     delete response.full_url;
   }

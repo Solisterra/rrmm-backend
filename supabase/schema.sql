@@ -12,6 +12,7 @@ CREATE TABLE users (
   display_name TEXT,
   role TEXT NOT NULL CHECK (role IN ('photographer','buyer','admin')),
   verified BOOLEAN DEFAULT FALSE,
+  buyer_tier TEXT NOT NULL DEFAULT 'marketplace' CHECK (buyer_tier IN ('marketplace','verified')),
   bid_status TEXT NOT NULL DEFAULT 'none' CHECK (bid_status IN ('none','pending','verified','rejected')),
   sell_status TEXT NOT NULL DEFAULT 'none' CHECK (sell_status IN ('none','pending','verified','rejected')),
   follower_count INTEGER DEFAULT 0,
@@ -44,8 +45,11 @@ CREATE TABLE auctions (
   full_url TEXT,
   file_size_mb NUMERIC(8,2),
   duration_secs INTEGER,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','active','closing','sold','unsold','cancelled')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','active','closing','sold','unsold','cancelled','marketplace','archived')),
   reserve_price NUMERIC(10,2) NOT NULL,
+  fallback_price NUMERIC(10,2),         -- optional marketplace fixed price (content lifecycle)
+  marketplace_since TIMESTAMPTZ,        -- clock for the 30-day archive sweep
+  license_count INTEGER NOT NULL DEFAULT 0,  -- non-exclusive licenses sold ("N licensed")
   duration_hours INTEGER NOT NULL DEFAULT 4,
   starts_at TIMESTAMPTZ,
   ends_at TIMESTAMPTZ,
@@ -183,6 +187,12 @@ CREATE TRIGGER trg_auction_sold AFTER UPDATE ON auctions FOR EACH ROW EXECUTE FU
 -- ── ATTESTATIONS (append to schema or run attestation_migration.sql) ──
 -- See supabase/attestation_migration.sql for full attestation schema
 -- including immutability triggers and audit view.
+
+-- ── CONTENT LIFECYCLE (run content_lifecycle_migration.sql) ──
+-- See supabase/content_lifecycle_migration.sql for the license_acceptances
+-- table (immutable, audited — cloned from attestations). The users.buyer_tier
+-- and auctions.fallback_price/marketplace_since/license_count columns and the
+-- 'marketplace'/'archived' statuses above are also created by that migration.
 
 -- ── BUYER APPLICATIONS ────────────────────────────────────────────────────
 CREATE TABLE buyer_applications (
