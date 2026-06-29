@@ -42,6 +42,8 @@ export async function createCheckoutSession({
   amount,
   buyerStripeId,
   auctionId,
+  transactionId,
+  purchaseType,
   title,
   photographerAccountId,
   successUrl,
@@ -50,9 +52,15 @@ export async function createCheckoutSession({
   const amountCents = Math.round(amount * 100);
   const platformFeeCents = Math.round(amountCents * PLATFORM_FEE);
 
-  // auction_id on the PaymentIntent is what the webhook keys off to settle the
-  // transaction and trigger content delivery. With a connected photographer
-  // account this becomes a destination charge (fee + auto-transfer of the net).
+  // transaction_id on the PaymentIntent is what the webhook settles by — a single
+  // transaction row, never auction_id (a marketplace listing has many). auction_id
+  // and purchase_type ride along for content lookup and delivery routing. With a
+  // connected photographer account this becomes a destination charge (fee +
+  // auto-transfer of the net).
+  const metadata: Record<string, string> = { auction_id: auctionId };
+  if (transactionId) metadata.transaction_id = transactionId;
+  if (purchaseType) metadata.purchase_type = purchaseType;
+
   return getStripe().checkout.sessions.create({
     mode: "payment",
     customer: buyerStripeId,
@@ -67,7 +75,7 @@ export async function createCheckoutSession({
       },
     ],
     payment_intent_data: {
-      metadata: { auction_id: auctionId },
+      metadata,
       ...(photographerAccountId
         ? {
             application_fee_amount: platformFeeCents,
@@ -75,7 +83,7 @@ export async function createCheckoutSession({
           }
         : {}),
     },
-    metadata: { auction_id: auctionId },
+    metadata,
     success_url: successUrl,
     cancel_url: cancelUrl,
   });

@@ -42,3 +42,4 @@ next-env.d.ts
 CLAUDE.md
 .github/copilot-instructions.md
 .env*.local
+context/

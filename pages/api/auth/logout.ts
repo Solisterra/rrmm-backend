@@ -1,22 +1,22 @@
 /**
  * POST /api/auth/logout
  *
- * Supabase JWTs are stateless — the frontend clears its token before calling
- * this. We make a best-effort call to revoke all other sessions for the user
- * so refresh tokens can't be replayed after logout.
+ * Clears the httpOnly session cookies and makes a best-effort call to revoke
+ * the user's other sessions so refresh tokens can't be replayed after logout.
  *
- * Auth: Bearer <supabase session access_token>
+ * Auth: httpOnly session cookie (falls back to Bearer <access_token>).
  */
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withErrorHandling } from "../../../lib/api";
 import { supabaseAdmin } from "../../../lib/supabase";
+import { getAccessToken, clearAuthCookies } from "../../../lib/cookies";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST")
     return res.status(405).json({ error: "POST only" });
 
-  const token = req.headers.authorization?.replace("Bearer ", "");
+  const token = getAccessToken(req);
   if (token) {
     const { data } = await supabaseAdmin.auth
       .getUser(token)
@@ -27,6 +27,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
   }
 
+  clearAuthCookies(res);
   return res.status(200).json({ success: true });
 }
 

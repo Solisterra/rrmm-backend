@@ -246,6 +246,7 @@ export interface PlaceBidResult {
 export interface CloseAuctionResult {
   success?: boolean;
   sold?: boolean;
+  marketplace?: boolean;
   transactionId?: string;
   salePrice?: number;
   photographerPayout?: number;
@@ -271,7 +272,17 @@ export interface CreatePaymentIntentParams {
 export interface CreateCheckoutSessionParams {
   amount: number;
   buyerStripeId: string;
+  // The content/listing id — kept on the PaymentIntent for context and as a
+  // legacy fallback. Settlement keys off `transactionId`, not this.
   auctionId: string;
+  // The transaction row the webhook settles by id. Required for the unified
+  // settlement path: a marketplace listing has MANY transactions, so keying off
+  // auctionId would settle the wrong rows. Present for both auction and
+  // marketplace checkouts.
+  transactionId?: string;
+  // 'auction' = exclusive, one-off, listing becomes terminal (sold).
+  // 'marketplace' = non-exclusive, listing stays live, per-buyer delivery.
+  purchaseType?: "auction" | "marketplace";
   title: string;
   // When present, use a destination charge: take our fee and pay the
   // photographer's net automatically. When absent, the platform collects and
@@ -364,6 +375,24 @@ export interface FormattedAuction {
   watermark_url: string | null;
   full_url: string | null;
   event_tag: string | null;
+}
+
+// A marketplace listing as the frontend consumes it. Marketplace listings are
+// auctions with status='marketplace': fixed-price (fallback_price), non-exclusive,
+// licensable many times (license_count drives the "N licensed" social proof).
+export interface FormattedMarketItem {
+  id: string;
+  photographer_id: string;
+  title: string;
+  category: AuctionCategory;
+  photographer: string;
+  emoji: string;
+  exclusive: Exclusivity;
+  price: number;
+  licensed: number;
+  preview_url: string | null;
+  watermark_url: string | null;
+  isNew: boolean;
 }
 
 export interface FormattedApplication {

@@ -63,11 +63,23 @@ async function createCheckout(req: NextApiRequest, res: NextApiResponse) {
   if (a.status !== "sold")
     return res.status(400).json({ error: "Auction not yet closed" });
 
+  // The transaction row was created when the auction closed (closeAuction). The
+  // webhook settles by this id, not by auction_id — the unified settlement path.
+  const { data: tx } = await supabaseAdmin
+    .from("transactions")
+    .select("id")
+    .eq("auction_id", auctionId!)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   const origin = frontendOrigin();
   const session = await createCheckoutSession({
     amount: a.sale_price!,
     buyerStripeId: u.stripe_customer_id,
     auctionId: auctionId!,
+    transactionId: (tx as { id: string } | null)?.id,
+    purchaseType: "auction",
     title: a.title,
     // Destination charge only if the photographer has a connected account.
     photographerAccountId: a.users?.stripe_account_id ?? null,
@@ -75,8 +87,8 @@ async function createCheckout(req: NextApiRequest, res: NextApiResponse) {
     cancelUrl: `${origin}/home?paid=0`,
   });
 
-  // Payment state is settled by the webhook (payment_intent.succeeded), keyed
-  // off the auction_id we put on the PaymentIntent — so nothing to persist here.
+  // Payment state is settled by the webhook (payment_intent.succeeded), keyed off
+  // the transaction id we put on the PaymentIntent — so nothing to persist here.
   return res.status(200).json({ url: session.url });
 }
 

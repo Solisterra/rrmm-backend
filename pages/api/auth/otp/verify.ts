@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { withErrorHandling } from "../../../../lib/api";
 import { supabase, formatUser } from "../../../../lib/supabase";
 import { findOrLinkUser } from "../../../../lib/syncUser";
+import { setAuthCookies } from "../../../../lib/cookies";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST")
@@ -31,9 +32,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   const existing = await findOrLinkUser(authUser.id, authUser.email!);
 
+  // Session tokens go into httpOnly cookies — never the response body.
+  setAuthCookies(res, session.access_token, session.refresh_token);
+
   return res.status(200).json({
-    accessToken: session.access_token,
-    refreshToken: session.refresh_token,
     user: existing ? formatUser(existing) : null,
     isNew: !existing,
   });

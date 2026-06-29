@@ -7,6 +7,7 @@ import type {
   DbTransaction,
   FormattedAuction,
   FormattedApplication,
+  FormattedMarketItem,
   FormattedTransaction,
 } from "./types";
 
@@ -66,6 +67,47 @@ export function formatAuction(
     watermark_url: row.watermark_url ?? null,
     full_url: row.full_url ?? null,
     event_tag: row.event_tag ?? null,
+  };
+}
+
+export function formatMarketItem(
+  row: DbAuction & {
+    users?: {
+      handle?: string | null;
+      display_name?: string | null;
+      photographer_handle?: string | null;
+    } | null;
+  },
+): FormattedMarketItem {
+  const now = Date.now();
+  const photographer =
+    row.users?.handle ??
+    row.users?.display_name ??
+    row.users?.photographer_handle ??
+    "Unknown";
+
+  // "New" tracks when the item entered the marketplace, not when it was created.
+  const sinceMs = row.marketplace_since
+    ? new Date(row.marketplace_since).getTime()
+    : row.created_at
+      ? new Date(row.created_at).getTime()
+      : 0;
+  const isNew = now - sinceMs < 24 * 60 * 60 * 1000;
+
+  return {
+    id: row.id,
+    photographer_id: row.photographer_id,
+    title: row.title,
+    category: row.category,
+    photographer,
+    emoji: CATEGORY_EMOJI[row.category] ?? "🌌",
+    exclusive: row.exclusivity as Exclusivity,
+    // Marketplace price is the fixed fallback price; never the (auction) reserve.
+    price: parseFloat(String(row.fallback_price ?? 0)),
+    licensed: row.license_count ?? 0,
+    preview_url: row.preview_url ?? null,
+    watermark_url: row.watermark_url ?? null,
+    isNew,
   };
 }
 

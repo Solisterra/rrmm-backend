@@ -203,6 +203,19 @@ export async function closeAuction(
   const wb = winningBid as (DbBid & { users?: DbUser }) | null;
 
   if (!wb || wb.amount < a.reserve_price) {
+    // No winning bid (or reserve not met). If a fallback price was set, move the
+    // listing into the fixed-price marketplace; otherwise mark it unsold.
+    if (a.fallback_price != null) {
+      await supabaseAdmin
+        .from("auctions")
+        .update({
+          status: "marketplace",
+          marketplace_since: new Date().toISOString(),
+        })
+        .eq("id", auctionId);
+      await _notifyAllBidders(auctionId, "unsold");
+      return { success: true, sold: false, marketplace: true };
+    }
     await supabaseAdmin
       .from("auctions")
       .update({ status: "unsold" })

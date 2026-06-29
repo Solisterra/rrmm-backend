@@ -44,6 +44,17 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(200).json({ success: true });
   }
 
+  if (req.method === "DELETE") {
+    const { id } = req.body as { id?: string };
+    const query = supabaseAdmin
+      .from("notifications")
+      .delete()
+      .eq("user_id", u.id);
+    if (id) query.eq("id", id); // delete one; otherwise clear all for the user
+    await query;
+    return res.status(200).json({ success: true });
+  }
+
   return res.status(405).json({ error: "Method not allowed" });
 }
 

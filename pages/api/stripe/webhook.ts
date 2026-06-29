@@ -5,7 +5,7 @@ import Stripe from "stripe";
 import { supabaseAdmin } from "../../../lib/supabase";
 import { storage } from "../../../lib/storage";
 import { notifyPaymentReceived } from "../../../lib/notifications";
-import type { DbAuction, DbUser } from "../../../lib/types";
+import type { DbAuction, DbUser, DbTransaction } from "../../../lib/types";
 
 export const config = { api: { bodyParser: false } };
 
@@ -61,12 +61,18 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 }
 
 async function handlePaymentSucceeded(paymentIntent: Stripe.PaymentIntent) {
-  const auctionId = paymentIntent.metadata.auction_id;
-  if (!auctionId) return;
+  const tx = await resolveTransaction(paymentIntent);
+  if (!tx) {
+    console.error(
+      `payment_intent.succeeded ${paymentIntent.id}: no transaction resolved`,
+    );
+    return;
+  }
 
-  // Hosted Checkout creates the PaymentIntent at pay time, so the transaction
-  // row has no payment_intent_id yet — key off auction_id (from PI metadata) and
-  // record the PI id now.
+  // Settle THIS transaction by its id — never by auction_id. A marketplace listing
+  // has many transactions (one per non-exclusive license); keying off auction_id
+  // would corrupt every other buyer's row. Hosted Checkout creates the
+  // PaymentIntent at pay time, so the row has no payment_intent_id until now.
   await supabaseAdmin
     .from("transactions")
     .update({
@@ -74,84 +80,155 @@ async function handlePaymentSucceeded(paymentIntent: Stripe.PaymentIntent) {
       payment_intent_id: paymentIntent.id,
       charge_id: paymentIntent.latest_charge,
     })
-    .eq("auction_id", auctionId);
+    .eq("id", tx.id);
 
   const { data: auction } = await supabaseAdmin
     .from("auctions")
     .select("*")
-    .eq("id", auctionId)
+    .eq("id", tx.auction_id)
     .single();
-  if (!auction) return;
-
-  const a = auction as DbAuction;
-  // The full-res file lives at the path stored in `full_url` (set from presign's
-  // `filePath` = `${photographer_id}/${fileId}.${ext}`). Sign that exact path —
-  // reconstructing it from the auction id does not match what was uploaded.
-  if (a.full_url) {
-    const signedUrl = await storage.createDownloadUrl(a.full_url);
-
-    if (!signedUrl) {
-      console.error(`Could not sign full_url for auction ${auctionId}`);
-    } else {
-      await supabaseAdmin
-        .from("auctions")
-        .update({ rights_transferred: true })
-        .eq("id", auctionId);
-    }
-  } else {
+  if (!auction) {
     console.error(
-      `Auction ${auctionId} has no full_url; cannot deliver content.`,
+      `Transaction ${tx.id} references missing auction ${tx.auction_id}`,
     );
+    return;
+  }
+  const a = auction as DbAuction;
+
+  // Delivery differs by tier: exclusive auctions terminate the listing; marketplace
+  // licenses are non-exclusive and the listing stays live. purchase_type is set on
+  // the PaymentIntent at checkout; absence means a (legacy) auction.
+  if (paymentIntent.metadata.purchase_type === "marketplace") {
+    await deliverMarketplaceLicense(a, tx);
+  } else {
+    await deliverExclusiveAuction(a, tx);
   }
 
-  await supabaseAdmin.from("notifications").insert({
-    user_id: a.buyer_id,
-    type: "payment_received",
-    auction_id: auctionId,
-    title: "📥 Content Ready for Download",
-    body: `Your payment for "${a.title}" was successful. Your exclusive content and rights transfer are ready.`,
-  });
-
+  // Payout side is identical for both: with a connected account this was a
+  // destination charge, so Stripe already moved the photographer's net as part of
+  // the payment. Do NOT create a second transfer — just record it on THIS
+  // transaction and notify. (transfer.created reconciles the final settled state.)
   const { data: photographer } = await supabaseAdmin
     .from("users")
     .select("stripe_account_id, id")
-    .eq("id", a.photographer_id)
+    .eq("id", tx.photographer_id)
     .single();
 
   const p = photographer as Pick<DbUser, "stripe_account_id" | "id"> | null;
   if (p?.stripe_account_id) {
-    // The charge was a destination charge (transfer_data.destination), so Stripe
-    // already moved the photographer's net to their connected account as part of
-    // this payment. Do NOT create a second transfer here — just record that the
-    // payout went out and notify them. (The transfer.created webhook reconciles
-    // the final settled state.)
     await supabaseAdmin
       .from("transactions")
       .update({
         payout_status: "in_transit",
         payout_initiated_at: new Date().toISOString(),
       })
-      .eq("auction_id", auctionId);
+      .eq("id", tx.id);
 
     await notifyPaymentReceived({
       photographerId: p.id,
-      auctionId,
-      amount: a.photographer_payout!,
+      auctionId: a.id,
+      amount: tx.photographer_payout,
     });
   }
 }
 
+// Exclusive auction win: one buyer, listing becomes terminal. The full-res file
+// lives at the path stored in `full_url` (set from presign's `filePath`); sign that
+// exact path. Flip the listing-level rights_transferred flag — the buyer pulls a
+// signed URL on demand once paid (see GET /api/auctions/[id]).
+async function deliverExclusiveAuction(a: DbAuction, tx: DbTransaction) {
+  if (a.full_url) {
+    const signedUrl = await storage.createDownloadUrl(a.full_url);
+    if (!signedUrl) {
+      console.error(`Could not sign full_url for auction ${a.id}`);
+    } else {
+      await supabaseAdmin
+        .from("auctions")
+        .update({ rights_transferred: true })
+        .eq("id", a.id);
+    }
+  } else {
+    console.error(`Auction ${a.id} has no full_url; cannot deliver content.`);
+  }
+
+  await supabaseAdmin.from("notifications").insert({
+    user_id: tx.buyer_id,
+    type: "payment_received",
+    auction_id: a.id,
+    title: "📥 Content Ready for Download",
+    body: `Your payment for "${a.title}" was successful. Your exclusive content and rights transfer are ready.`,
+  });
+}
+
+// Non-exclusive marketplace license: the listing stays in 'marketplace' and must
+// NOT flip rights_transferred (a listing-level, single-buyer flag). Each buyer's
+// access is gated by their own succeeded transaction; they pull a per-buyer signed
+// URL on demand (see GET /api/marketplace/[id]). Nothing terminal happens here.
+async function deliverMarketplaceLicense(a: DbAuction, tx: DbTransaction) {
+  if (!a.full_url) {
+    console.error(
+      `Marketplace listing ${a.id} has no full_url; cannot deliver.`,
+    );
+  }
+
+  // Bump license_count: "N licensed" social proof and the archive gate (B3 only
+  // archives when license_count = 0). Read-modify-write matches the view_count
+  // convention; a lost update can only undercount social proof — it can never let
+  // a paid listing be archived (the count stays > 0).
+  await supabaseAdmin
+    .from("auctions")
+    .update({ license_count: (a.license_count ?? 0) + 1 })
+    .eq("id", a.id);
+
+  await supabaseAdmin.from("notifications").insert({
+    user_id: tx.buyer_id,
+    type: "payment_received",
+    auction_id: a.id,
+    title: "📥 License Ready for Download",
+    body: `Your purchase of "${a.title}" was successful. Your non-exclusive license and full-resolution download are ready.`,
+  });
+}
+
 async function handlePaymentFailed(paymentIntent: Stripe.PaymentIntent) {
-  const auctionId = paymentIntent.metadata.auction_id;
-  if (!auctionId) return;
+  const tx = await resolveTransaction(paymentIntent);
+  if (!tx) return;
   await supabaseAdmin
     .from("transactions")
     .update({ payment_status: "failed", payment_intent_id: paymentIntent.id })
-    .eq("auction_id", auctionId);
+    .eq("id", tx.id);
   console.error(
-    `Payment failed for auction ${auctionId}:`,
+    `Payment failed for transaction ${tx.id} (auction ${tx.auction_id}):`,
     paymentIntent.last_payment_error?.message,
   );
+}
+
+// Settlement keys off the transaction id carried on the PaymentIntent (set for both
+// auction and marketplace checkouts). Older in-flight auction PaymentIntents from
+// before this refactor carried only auction_id — fall back to the single
+// transaction for that auction so they still settle.
+async function resolveTransaction(
+  paymentIntent: Stripe.PaymentIntent,
+): Promise<DbTransaction | null> {
+  const transactionId = paymentIntent.metadata.transaction_id;
+  if (transactionId) {
+    const { data } = await supabaseAdmin
+      .from("transactions")
+      .select("*")
+      .eq("id", transactionId)
+      .single();
+    return (data as DbTransaction) ?? null;
+  }
+
+  const auctionId = paymentIntent.metadata.auction_id;
+  if (!auctionId) return null;
+  const { data } = await supabaseAdmin
+    .from("transactions")
+    .select("*")
+    .eq("auction_id", auctionId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data as DbTransaction) ?? null;
 }
 
 async function handleTransferCreated(transfer: Stripe.Transfer) {

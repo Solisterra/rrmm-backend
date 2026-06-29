@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { NextApiRequest } from "next";
 import type { DbUser, Role } from "./types";
+import { getAccessToken } from "./cookies";
 
 let _anon: SupabaseClient | null = null;
 let _admin: SupabaseClient | null = null;
@@ -58,7 +59,7 @@ export async function getUserFromRequest(
     }
   }
 
-  const token = req.headers.authorization?.replace("Bearer ", "");
+  const token = getAccessToken(req);
   if (!token) return null;
   const {
     data: { user },

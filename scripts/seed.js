@@ -148,6 +148,63 @@ const AUCTIONS = [
   },
 ];
 
+// Marketplace listings — content that didn't sell at auction and moved to the
+// fixed-price, non-exclusive Marketplace. `price` is the fallback price; `licensed`
+// is how many buyers have licensed it ("N licensed" social proof). `daysListed`
+// sets marketplace_since relative to now (drives the 30-day archive clock + "New").
+const MARKETPLACE = [
+  {
+    title: "Starship Stack — Wide Establishing Shot",
+    category: "Scenic",
+    photographer: "@boca_chica_sky",
+    emoji: "🌆",
+    price: 75,
+    reserve: 400,
+    licensed: 42,
+    daysListed: 12,
+  },
+  {
+    title: "Mechazilla Arms — Detail Pack",
+    category: "Infrastructure",
+    photographer: "@starbase_shots",
+    emoji: "🦾",
+    price: 120,
+    reserve: 500,
+    licensed: 18,
+    daysListed: 6,
+  },
+  {
+    title: "Raptor Engine Bay — Editorial Set",
+    category: "Test Event",
+    photographer: "@rio_grande_media",
+    emoji: "🔧",
+    price: 95,
+    reserve: 450,
+    licensed: 7,
+    daysListed: 2,
+  },
+  {
+    title: "Launch Pad at Golden Hour",
+    category: "Scenic",
+    photographer: "@boca_lens",
+    emoji: "🌇",
+    price: 60,
+    reserve: 300,
+    licensed: 0,
+    daysListed: 0,
+  },
+  {
+    title: "Orbital Tank Farm — Aerial Survey",
+    category: "Infrastructure",
+    photographer: "@boca_chica_sky",
+    emoji: "🛢️",
+    price: 140,
+    reserve: 600,
+    licensed: 23,
+    daysListed: 9,
+  },
+];
+
 const EARNINGS_HIST = [
   {
     id: 1,
@@ -276,15 +333,37 @@ const APP_EMAILS = [
   "rachel@launchlog.io",
 ];
 
+// The handles this seed owns. We also clear by handle (not just email) so a
+// re-run reclaims handles even if a prior run / test signup left a row behind
+// under a different email — handle has a UNIQUE constraint and would otherwise
+// collide on insert.
+const SEED_HANDLES = [
+  "@boca_lens",
+  "@starbase_shots",
+  "@rio_grande_media",
+  "@boca_chica_sky",
+  "NASASpaceflight",
+  "EverydayAstronaut",
+  "LabPadre",
+  "SpaceExplored",
+];
+
 async function clear() {
   console.log("Clearing previous seed data...");
 
-  // Look up seeded user IDs first
-  const { data: seedUsers } = await db
+  // Look up seeded users by email OR handle (handle is UNIQUE, so a stray row
+  // holding a seed handle under another email must be cleared too).
+  const { data: byEmail } = await db
     .from("users")
     .select("id")
     .in("email", SEED_EMAILS);
-  const seedIds = (seedUsers || []).map((u) => u.id);
+  const { data: byHandle } = await db
+    .from("users")
+    .select("id")
+    .in("handle", SEED_HANDLES);
+  const seedIds = [
+    ...new Set([...(byEmail || []), ...(byHandle || [])].map((u) => u.id)),
+  ];
 
   if (seedIds.length > 0) {
     // Auctions created by or bought by seeded users
@@ -298,11 +377,28 @@ async function clear() {
 
     if (auctionIds.length > 0) {
       await db.from("bids").delete().in("auction_id", auctionIds);
+      // license_acceptances.transaction_id has no cascade — clear them before
+      // their transactions so transaction deletes aren't blocked.
+      await db.from("license_acceptances").delete().in("content_id", auctionIds);
       await db.from("transactions").delete().in("auction_id", auctionIds);
       await db.from("auctions").delete().in("id", auctionIds);
     }
 
-    await db.from("users").delete().in("id", seedIds);
+    // Transactions can also reference seed users directly (buyer/photographer)
+    // on non-seed auctions; remove those before deleting the users.
+    await db
+      .from("transactions")
+      .delete()
+      .or(
+        `photographer_id.in.(${seedIds.join(",")}),buyer_id.in.(${seedIds.join(",")})`,
+      );
+
+    const { error: userDelErr } = await db
+      .from("users")
+      .delete()
+      .in("id", seedIds);
+    if (userDelErr)
+      throw new Error(`clearing seed users: ${userDelErr.message}`);
   }
 
   await db.from("buyer_applications").delete().in("email", APP_EMAILS);
@@ -452,6 +548,41 @@ async function run() {
   });
 
   await insert("bids", bidRows, "bids");
+
+  // 3b. Marketplace listings (auction → marketplace lifecycle stage)
+  const marketplaceRows = MARKETPLACE.map((m) => {
+    const since = new Date(now - m.daysListed * 24 * 60 * 60_000).toISOString();
+    // The auction ran for its duration and closed (unsold) right before it
+    // entered the marketplace.
+    const startedAt = new Date(
+      now - (m.daysListed * 24 + 4) * 60 * 60_000,
+    ).toISOString();
+    return {
+      photographer_id: byHandle[m.photographer],
+      title: m.title,
+      description: `${m.emoji} ${m.title}`,
+      category: m.category,
+      content_type: "photo",
+      exclusivity: "Non-Exclusive",
+      preview_url: `https://placehold.co/800x600?text=${encodeURIComponent(m.title)}`,
+      status: "marketplace",
+      reserve_price: m.reserve,
+      fallback_price: m.price,
+      license_count: m.licensed,
+      marketplace_since: since,
+      duration_hours: 4,
+      starts_at: startedAt,
+      ends_at: since,
+      created_at: startedAt,
+    };
+  });
+
+  const { data: marketplaceListings, error: mErr } = await db
+    .from("auctions")
+    .insert(marketplaceRows)
+    .select("id, title");
+  if (mErr) throw new Error(`marketplace listings: ${mErr.message}`);
+  console.log(`  + ${marketplaceListings.length} marketplace listings`);
 
   // 4. Historical sold auctions
   const histAuctionRows = EARNINGS_HIST.map((e) => {
