@@ -136,7 +136,8 @@ async function handlePaymentSucceeded(paymentIntent: Stripe.PaymentIntent) {
 // lives at the path stored in `full_url` (set from presign's `filePath`); sign that
 // exact path. Flip the listing-level rights_transferred flag — the buyer pulls a
 // signed URL on demand once paid (see GET /api/auctions/[id]).
-async function deliverExclusiveAuction(a: DbAuction, tx: DbTransaction) {
+// Exported for unit testing (not a route export — Next only treats `default`/`config` specially).
+export async function deliverExclusiveAuction(a: DbAuction, tx: DbTransaction) {
   if (a.full_url) {
     const signedUrl = await storage.createDownloadUrl(a.full_url);
     if (!signedUrl) {
@@ -164,7 +165,10 @@ async function deliverExclusiveAuction(a: DbAuction, tx: DbTransaction) {
 // NOT flip rights_transferred (a listing-level, single-buyer flag). Each buyer's
 // access is gated by their own succeeded transaction; they pull a per-buyer signed
 // URL on demand (see GET /api/marketplace/[id]). Nothing terminal happens here.
-async function deliverMarketplaceLicense(a: DbAuction, tx: DbTransaction) {
+export async function deliverMarketplaceLicense(
+  a: DbAuction,
+  tx: DbTransaction,
+) {
   if (!a.full_url) {
     console.error(
       `Marketplace listing ${a.id} has no full_url; cannot deliver.`,
@@ -206,7 +210,7 @@ async function handlePaymentFailed(paymentIntent: Stripe.PaymentIntent) {
 // auction and marketplace checkouts). Older in-flight auction PaymentIntents from
 // before this refactor carried only auction_id — fall back to the single
 // transaction for that auction so they still settle.
-async function resolveTransaction(
+export async function resolveTransaction(
   paymentIntent: Stripe.PaymentIntent,
 ): Promise<DbTransaction | null> {
   const transactionId = paymentIntent.metadata.transaction_id;

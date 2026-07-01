@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "./supabase";
+import { computeSplit } from "./money";
 import {
   notifyOutbid,
   notifyAuctionWon,
@@ -16,7 +17,6 @@ import type {
   DbUser,
 } from "./types";
 
-const PLATFORM_FEE = parseFloat(process.env.PLATFORM_FEE_PCT || "0.20");
 const AUTO_EXTEND_MINUTES = 5;
 const AUTO_EXTEND_TRIGGER_MINUTES = 5;
 const MAX_EXTENSIONS = 6;
@@ -225,8 +225,7 @@ export async function closeAuction(
   }
 
   const salePrice = wb.amount;
-  const platformFee = parseFloat((salePrice * PLATFORM_FEE).toFixed(2));
-  const photographerPayout = parseFloat((salePrice - platformFee).toFixed(2));
+  const { platformFee, photographerPayout } = computeSplit(salePrice);
 
   await supabaseAdmin
     .from("auctions")

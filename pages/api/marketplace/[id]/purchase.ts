@@ -2,9 +2,8 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { withErrorHandling } from "../../../../lib/api";
 import { getUserFromRequest, supabaseAdmin } from "../../../../lib/supabase";
 import { createCheckoutSession } from "../../../../lib/stripe";
+import { computeSplit } from "../../../../lib/money";
 import type { DbUser, DbAuction } from "../../../../lib/types";
-
-const PLATFORM_FEE = parseFloat(process.env.PLATFORM_FEE_PCT || "0.20");
 
 // First configured frontend origin — where Checkout redirects the buyer back to.
 function frontendOrigin(): string {
@@ -56,12 +55,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       .status(403)
       .json({ error: "You cannot license your own content" });
 
-  // Same money math + rounding the auction engine uses.
-  const grossAmount = parseFloat(String(a.fallback_price));
-  const platformFee = parseFloat((grossAmount * PLATFORM_FEE).toFixed(2));
-  const photographerPayout = parseFloat(
-    (grossAmount - platformFee).toFixed(2),
-  );
+  // Same money split the auction engine uses (single source of truth, lib/money).
+  const {
+    gross: grossAmount,
+    platformFee,
+    photographerPayout,
+  } = computeSplit(parseFloat(String(a.fallback_price)));
 
   // One transaction row per license. payment_status stays 'pending' until the
   // webhook settles it by id. payment_intent_id is filled in then (the hosted
