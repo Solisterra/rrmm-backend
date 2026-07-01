@@ -9,6 +9,7 @@ import type {
   NotifyPaymentReceivedParams,
   NotifyWatchlistUrgentParams,
   NotifyContentParams,
+  NotifyContentArchivedParams,
   NotificationType,
 } from "./types";
 
@@ -282,6 +283,28 @@ export async function notifyContentRejected({
     auctionId,
     title: "❌ Listing not approved",
     body: `"${(auction as { title: string } | null)?.title}" was not approved. Reason: ${reason}. Please review our content guidelines and resubmit.`,
+    sendEmail: true,
+  });
+}
+
+// Seller-facing, sent by the archive cron sweep (B3) when a marketplace listing
+// goes 30 days with no license sold. The listing is now 'archived' and its rights
+// have reverted to the photographer, who can relist it.
+export async function notifyContentArchived({
+  photographerId,
+  auctionId,
+}: NotifyContentArchivedParams): Promise<void> {
+  const { data: auction } = await supabaseAdmin
+    .from("auctions")
+    .select("title")
+    .eq("id", auctionId)
+    .single();
+  await createNotification({
+    userId: photographerId,
+    type: "content_archived",
+    auctionId,
+    title: "🗄️ Listing archived",
+    body: `"${(auction as { title: string } | null)?.title}" spent 30 days on the marketplace without a license and has been archived. The rights have reverted to you — relist it anytime to put it back up for sale.`,
     sendEmail: true,
   });
 }

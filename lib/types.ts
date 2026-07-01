@@ -36,7 +36,8 @@ export type NotificationType =
   | "payout_sent"
   | "auction_ending"
   | "content_approved"
-  | "content_rejected";
+  | "content_rejected"
+  | "content_archived";
 export type PaymentStatus =
   | "pending"
   | "processing"
@@ -260,6 +261,15 @@ export interface ActivateAuctionResult {
   error?: string;
 }
 
+// Result of the archive sweep on a single stale marketplace listing.
+// `archived` is false when the race-guarded conditional UPDATE matched no row —
+// an in-flight purchase bumped license_count, or the listing was already archived.
+export interface ArchiveListingResult {
+  success?: boolean;
+  archived: boolean;
+  error?: string;
+}
+
 // ── Stripe helpers ────────────────────────────────────────────────────────────
 
 export interface CreatePaymentIntentParams {
@@ -339,6 +349,12 @@ export interface NotifyContentParams {
   photographerId: string;
   auctionId: string;
   reason?: string;
+}
+
+// Seller-facing: their stale marketplace listing was archived (30d, no licenses).
+export interface NotifyContentArchivedParams {
+  photographerId: string;
+  auctionId: string;
 }
 
 // ── DocuSign ──────────────────────────────────────────────────────────────────

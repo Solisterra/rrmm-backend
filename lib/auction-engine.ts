@@ -6,12 +6,14 @@ import {
   notifyAuctionLost,
   notifyAuctionSold,
   notifyWatchlistUrgent,
+  notifyContentArchived,
 } from "./notifications";
 import type {
   PlaceBidParams,
   PlaceBidResult,
   CloseAuctionResult,
   ActivateAuctionResult,
+  ArchiveListingResult,
   DbAuction,
   DbBid,
   DbUser,
@@ -20,6 +22,8 @@ import type {
 const AUTO_EXTEND_MINUTES = 5;
 const AUTO_EXTEND_TRIGGER_MINUTES = 5;
 const MAX_EXTENSIONS = 6;
+// A marketplace listing with no licenses sold is archived after this long.
+const ARCHIVE_AFTER_DAYS = 30;
 
 // ── Place a bid ───────────────────────────────────────────────────────────────
 
@@ -354,6 +358,73 @@ export async function processExpiredAuctions(): Promise<
   for (const auction of (expired as Array<{ id: string }>) || []) {
     const result = await closeAuction(auction.id);
     results.push({ id: auction.id, ...result });
+  }
+  return results;
+}
+
+// ── Archive a stale marketplace listing ───────────────────────────────────────
+
+export async function archiveListing(
+  auctionId: string,
+): Promise<ArchiveListingResult> {
+  // Race-safe flip: re-assert status='marketplace' AND license_count=0 in the
+  // WHERE, not just in the caller's pre-select. The select and update are not
+  // atomic, so a purchase that lands inside the 30-day window (and bumps
+  // license_count on payment success — see the webhook) must make this UPDATE
+  // match zero rows so the listing correctly stays live. Same predicate makes
+  // re-runs idempotent: once archived, status is no longer 'marketplace'.
+  const { data: archived } = await supabaseAdmin
+    .from("auctions")
+    .update({
+      status: "archived",
+      // Rights revert to the photographer. No license was ever sold
+      // (license_count=0), so the content leaves the marketplace with no buyer
+      // holding any rights — this makes that explicit and survives re-runs.
+      rights_transferred: false,
+    })
+    .eq("id", auctionId)
+    .eq("status", "marketplace")
+    .eq("license_count", 0)
+    .select("id, photographer_id, title");
+
+  const rows = archived as Array<
+    Pick<DbAuction, "id" | "photographer_id" | "title">
+  > | null;
+  // Zero rows ⇒ lost the race to an in-flight purchase, or already archived.
+  if (!rows || rows.length === 0) return { archived: false };
+
+  await notifyContentArchived({
+    photographerId: rows[0].photographer_id,
+    auctionId,
+  });
+  return { success: true, archived: true };
+}
+
+// ── Process stale marketplace listings (called by cron) ───────────────────────
+// Second, independent sweep alongside processExpiredAuctions in the same cron run.
+// Marketplace listings that sit 30 days with no license sold are archived and
+// their rights revert to the photographer.
+export async function processStaleMarketplaceListings(): Promise<
+  Array<{ id: string } & ArchiveListingResult>
+> {
+  const cutoff = new Date(
+    Date.now() - ARCHIVE_AFTER_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+
+  // Candidate pre-filter; archiveListing re-checks the same predicate atomically.
+  // marketplace_since is always set on entry to 'marketplace' (see closeAuction);
+  // a NULL would be excluded by `<`, which is the safe default.
+  const { data: stale } = await supabaseAdmin
+    .from("auctions")
+    .select("id")
+    .eq("status", "marketplace")
+    .eq("license_count", 0)
+    .lt("marketplace_since", cutoff);
+
+  const results: Array<{ id: string } & ArchiveListingResult> = [];
+  for (const listing of (stale as Array<{ id: string }>) || []) {
+    const result = await archiveListing(listing.id);
+    results.push({ id: listing.id, ...result });
   }
   return results;
 }

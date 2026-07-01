@@ -11,6 +11,7 @@ const notifications = {
   notifyAuctionLost: vi.fn(),
   notifyAuctionSold: vi.fn(),
   notifyWatchlistUrgent: vi.fn(),
+  notifyContentArchived: vi.fn(),
 };
 
 vi.mock("../../lib/supabase", () => ({
@@ -232,5 +233,115 @@ describe("closeAuction — branch selection", () => {
     resolveWith(makeAuction({ status: "marketplace" }), null);
     const r = await engine.closeAuction("auction-1");
     expect(r.error).toBe("Cannot close auction");
+  });
+});
+
+describe("archiveListing — race-safe archive of a stale marketplace listing", () => {
+  // The archive flip is a conditional UPDATE ... .select() returning the affected
+  // rows. The harness settles awaited chains via the resolver, so we hand back a
+  // 1-row array for "archived" and an empty array for "race lost / already gone".
+  function resolveArchive(rows: unknown[]) {
+    db.setResolver(({ table, ops }: ResolveCtx) =>
+      table === "auctions" && ops.some((o) => o.m === "update")
+        ? { data: rows, error: null }
+        : { data: null, error: null },
+    );
+  }
+
+  it("flips status to archived and reverts rights when the row still qualifies", async () => {
+    resolveArchive([
+      { id: "auction-1", photographer_id: "photographer-1", title: "Old Shot" },
+    ]);
+
+    const r = await engine.archiveListing("auction-1");
+    expect(r).toEqual({ success: true, archived: true });
+
+    const update = db.updates("auctions")[0];
+    expect(update).toMatchObject({
+      status: "archived",
+      rights_transferred: false,
+    });
+  });
+
+  it("gates the flip on status='marketplace' AND license_count=0 (the race guard)", async () => {
+    resolveArchive([
+      { id: "auction-1", photographer_id: "photographer-1", title: "Old Shot" },
+    ]);
+    await engine.archiveListing("auction-1");
+
+    const entry = db.log.find(
+      (e) => e.table === "auctions" && e.ops.some((o) => o.m === "update"),
+    );
+    const eqArgs = entry!.ops.filter((o) => o.m === "eq").map((o) => o.args);
+    expect(eqArgs).toContainEqual(["id", "auction-1"]);
+    expect(eqArgs).toContainEqual(["status", "marketplace"]);
+    expect(eqArgs).toContainEqual(["license_count", 0]);
+  });
+
+  it("notifies the photographer that their listing was archived", async () => {
+    resolveArchive([
+      { id: "auction-1", photographer_id: "ph-9", title: "Old Shot" },
+    ]);
+    await engine.archiveListing("auction-1");
+
+    expect(notifications.notifyContentArchived).toHaveBeenCalledOnce();
+    expect(notifications.notifyContentArchived).toHaveBeenCalledWith({
+      photographerId: "ph-9",
+      auctionId: "auction-1",
+    });
+  });
+
+  it("is a no-op when the conditional UPDATE matches no row (in-flight purchase / already archived)", async () => {
+    resolveArchive([]); // license_count went > 0, or status already 'archived'
+
+    const r = await engine.archiveListing("auction-1");
+    expect(r).toEqual({ archived: false });
+    expect(r.success).toBeUndefined();
+    expect(notifications.notifyContentArchived).not.toHaveBeenCalled();
+  });
+});
+
+describe("processStaleMarketplaceListings — the cron sweep", () => {
+  it("filters candidates on marketplace + 0 licenses + age, then archives each", async () => {
+    db.setResolver(({ table, ops }: ResolveCtx) => {
+      if (table !== "auctions") return { data: null, error: null };
+      if (ops.some((o) => o.m === "update")) {
+        // Echo the id from the conditional update so notify gets a realistic owner.
+        const id = ops.find((o) => o.m === "eq" && o.args[0] === "id")?.args[1];
+        return {
+          data: [{ id, photographer_id: `ph-${id}`, title: "Old Shot" }],
+          error: null,
+        };
+      }
+      // Candidate pre-select.
+      return { data: [{ id: "auction-1" }, { id: "auction-2" }], error: null };
+    });
+
+    const results = await engine.processStaleMarketplaceListings();
+
+    expect(results).toEqual([
+      { id: "auction-1", success: true, archived: true },
+      { id: "auction-2", success: true, archived: true },
+    ]);
+    expect(notifications.notifyContentArchived).toHaveBeenCalledTimes(2);
+
+    // The candidate pre-select carries the same predicate the archive re-asserts,
+    // plus the 30-day age cutoff on marketplace_since.
+    const selectEntry = db.log.find(
+      (e) => e.table === "auctions" && e.ops.some((o) => o.m === "lt"),
+    );
+    const eqArgs = selectEntry!.ops.filter((o) => o.m === "eq").map((o) => o.args);
+    expect(eqArgs).toContainEqual(["status", "marketplace"]);
+    expect(eqArgs).toContainEqual(["license_count", 0]);
+    const lt = selectEntry!.ops.find((o) => o.m === "lt")!.args;
+    expect(lt[0]).toBe("marketplace_since");
+    expect(lt[1]).toBeTypeOf("string"); // ISO cutoff timestamp
+  });
+
+  it("returns an empty result set and archives nothing when none are stale", async () => {
+    db.setResolver(() => ({ data: [], error: null }));
+    const results = await engine.processStaleMarketplaceListings();
+    expect(results).toEqual([]);
+    expect(notifications.notifyContentArchived).not.toHaveBeenCalled();
   });
 });
