@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   formatAuction,
   formatMarketItem,
+  formatArchivedListing,
   formatApplication,
   formatTransaction,
 } from "../../lib/format";
@@ -152,6 +153,37 @@ describe("formatTransaction", () => {
     expect(out.title).toBe("Booster Catch");
     expect(out.buyer).toBe("Ada");
     expect(out.emoji).toBe("🏆");
+  });
+});
+
+describe("formatArchivedListing", () => {
+  it("shapes an archived row as a relist candidate", () => {
+    const out = formatArchivedListing(
+      makeAuction({
+        status: "archived",
+        fallback_price: 40,
+        category: "Scenic",
+        updated_at: "2026-06-01T00:00:00.000Z",
+      }),
+    );
+    expect(out).toMatchObject({
+      id: "auction-1",
+      photographer_id: "photographer-1",
+      category: "Scenic",
+      emoji: "🌅",
+      price: 40,
+      archivedAt: "2026-06-01T00:00:00.000Z",
+    });
+    // No live-auction fields and, critically, no full-res URL leak.
+    expect(out).not.toHaveProperty("currentBid");
+    expect(out).not.toHaveProperty("full_url");
+  });
+
+  it("defaults a missing fallback price to 0", () => {
+    const out = formatArchivedListing(
+      makeAuction({ status: "archived", fallback_price: null }),
+    );
+    expect(out.price).toBe(0);
   });
 });
 

@@ -7,6 +7,7 @@ import type {
   DbTransaction,
   FormattedAuction,
   FormattedApplication,
+  FormattedArchivedListing,
   FormattedMarketItem,
   FormattedTransaction,
 } from "./types";
@@ -108,6 +109,27 @@ export function formatMarketItem(
     preview_url: row.preview_url ?? null,
     watermark_url: row.watermark_url ?? null,
     isNew,
+  };
+}
+
+// Shapes a photographer's own archived listing for the seller dashboard's
+// Archived Content section — a relist candidate, so no live-auction fields.
+export function formatArchivedListing(row: DbAuction): FormattedArchivedListing {
+  return {
+    id: row.id,
+    photographer_id: row.photographer_id,
+    title: row.title,
+    category: row.category,
+    emoji: CATEGORY_EMOJI[row.category] ?? "🌌",
+    exclusive: row.exclusivity as Exclusivity,
+    // The fixed price it last carried on the marketplace — prefills the relist
+    // form. (Archiving requires it was a marketplace listing, so this is set.)
+    price: parseFloat(String(row.fallback_price ?? 0)),
+    preview_url: row.preview_url ?? null,
+    watermark_url: row.watermark_url ?? null,
+    // The archive flip is the row's last write, so updated_at is when it was
+    // archived (there is no dedicated archived_at column).
+    archivedAt: row.updated_at,
   };
 }
 

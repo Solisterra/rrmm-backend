@@ -345,3 +345,114 @@ describe("processStaleMarketplaceListings — the cron sweep", () => {
     expect(notifications.notifyContentArchived).not.toHaveBeenCalled();
   });
 });
+
+describe("relistListing — archived listing back to auction or marketplace (B9)", () => {
+  // The relist flip is a conditional UPDATE ... .select("id"). The harness settles
+  // the awaited chain via the resolver: a 1-row array = "still archived, relisted",
+  // an empty array = "not archived / lost the race".
+  function resolveRelist(rows: unknown[]) {
+    db.setResolver(({ table, ops }: ResolveCtx) =>
+      table === "auctions" && ops.some((o) => o.m === "update")
+        ? { data: rows, error: null }
+        : { data: null, error: null },
+    );
+  }
+
+  it("auction mode: reactivates with fresh timing and a clean auction state", async () => {
+    resolveRelist([{ id: "auction-1" }]);
+
+    const r = await engine.relistListing({
+      auctionId: "auction-1",
+      mode: "auction",
+      reservePrice: 500,
+      durationHours: 4,
+      fallbackPrice: 100,
+    });
+
+    expect(r).toMatchObject({ success: true, status: "active" });
+    expect(r.startsAt).toBeTypeOf("string");
+    expect(r.endsAt).toBeTypeOf("string");
+    // ends_at is exactly duration_hours after starts_at.
+    const span =
+      new Date(r.endsAt!).getTime() - new Date(r.startsAt!).getTime();
+    expect(span).toBe(4 * 60 * 60 * 1000);
+
+    const update = db.updates("auctions")[0];
+    expect(update).toMatchObject({
+      status: "active",
+      reserve_price: 500,
+      duration_hours: 4,
+      fallback_price: 100,
+      marketplace_since: null,
+      current_bid: 0,
+      bid_count: 0,
+      winning_bid_id: null,
+      buyer_id: null,
+      sale_price: null,
+      auto_extended: false,
+      extension_count: 0,
+      rights_transferred: false,
+    });
+  });
+
+  it("auction mode: defaults fallback_price to null when omitted", async () => {
+    resolveRelist([{ id: "auction-1" }]);
+    await engine.relistListing({
+      auctionId: "auction-1",
+      mode: "auction",
+      reservePrice: 500,
+      durationHours: 2,
+    });
+    expect(db.updates("auctions")[0].fallback_price).toBeNull();
+  });
+
+  it("marketplace mode: goes live at a fixed price and restarts the 30-day clock", async () => {
+    resolveRelist([{ id: "auction-1" }]);
+
+    const r = await engine.relistListing({
+      auctionId: "auction-1",
+      mode: "marketplace",
+      fallbackPrice: 150,
+    });
+
+    expect(r).toMatchObject({ success: true, status: "marketplace" });
+    const update = db.updates("auctions")[0];
+    expect(update).toMatchObject({
+      status: "marketplace",
+      fallback_price: 150,
+      rights_transferred: false,
+    });
+    expect(update.marketplace_since).toBeTypeOf("string");
+    // Marketplace relist does not touch the auction clock.
+    expect(update).not.toHaveProperty("starts_at");
+    expect(update).not.toHaveProperty("ends_at");
+  });
+
+  it("gates the flip on status='archived' (the race/idempotency guard)", async () => {
+    resolveRelist([{ id: "auction-1" }]);
+    await engine.relistListing({
+      auctionId: "auction-1",
+      mode: "marketplace",
+      fallbackPrice: 150,
+    });
+    const entry = db.log.find(
+      (e) => e.table === "auctions" && e.ops.some((o) => o.m === "update"),
+    );
+    const eqArgs = entry!.ops.filter((o) => o.m === "eq").map((o) => o.args);
+    expect(eqArgs).toContainEqual(["id", "auction-1"]);
+    expect(eqArgs).toContainEqual(["status", "archived"]);
+  });
+
+  it("errors when the conditional UPDATE matches no row (not archived / lost race)", async () => {
+    resolveRelist([]); // status wasn't 'archived' anymore
+
+    const r = await engine.relistListing({
+      auctionId: "auction-1",
+      mode: "auction",
+      reservePrice: 500,
+      durationHours: 4,
+    });
+    expect(r.error).toBe("Listing is not archived");
+    expect(r.success).toBeUndefined();
+  });
+});

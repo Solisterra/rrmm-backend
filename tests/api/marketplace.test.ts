@@ -3,6 +3,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { makeSupabaseHarness, type ResolveCtx } from "../helpers/supabase-mock";
 import { makeUser, makeAuction } from "../helpers/factories";
 import { mockReq, mockRes } from "../helpers/http";
+import { LICENSE_LEGAL_TEXT } from "../../lib/license";
 
 type Handler = (req: NextApiRequest, res: NextApiResponse) => Promise<unknown>;
 
@@ -382,8 +383,9 @@ describe("POST /api/marketplace/[id]/accept-license — B7", () => {
       session_id: "sess-xyz",
       license_version: "v1.0",
     });
-    // The exact terms shown are frozen into the row.
-    expect(String(row.legal_text_snapshot)).toContain("Non-exclusive license");
+    // The exact terms shown are frozen into the row — byte-identical to the
+    // canonical text (which must itself match the copy the frontend renders).
+    expect(row.legal_text_snapshot).toBe(LICENSE_LEGAL_TEXT);
   });
 
   it("is idempotent: a repeat accept returns the first record and writes nothing", async () => {

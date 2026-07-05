@@ -14,6 +14,8 @@ import type {
   CloseAuctionResult,
   ActivateAuctionResult,
   ArchiveListingResult,
+  RelistListingParams,
+  RelistListingResult,
   DbAuction,
   DbBid,
   DbUser,
@@ -427,4 +429,80 @@ export async function processStaleMarketplaceListings(): Promise<
     results.push({ id: listing.id, ...result });
   }
   return results;
+}
+
+// ── Relist an archived listing ────────────────────────────────────────────────
+// The photographer puts previously-archived content back up for sale, either as a
+// fresh auction or straight into the fixed-price marketplace. Ownership/role are
+// enforced by the route; this owns the state transition. The flip is a CONDITIONAL
+// UPDATE re-asserting `status='archived'` in the WHERE, so a concurrent relist (or
+// any non-archived state) matches zero rows and returns an error instead of
+// silently re-arming a live listing.
+export async function relistListing({
+  auctionId,
+  mode,
+  reservePrice,
+  durationHours,
+  fallbackPrice = null,
+}: RelistListingParams): Promise<RelistListingResult> {
+  if (mode === "auction") {
+    const startsAt = new Date();
+    const endsAt = new Date(
+      startsAt.getTime() + durationHours! * 60 * 60 * 1000,
+    );
+    // Reset every auction + prior-sale field so the relisted auction starts clean;
+    // clear the marketplace clock since it's no longer a marketplace item.
+    const { data } = await supabaseAdmin
+      .from("auctions")
+      .update({
+        status: "active",
+        reserve_price: reservePrice,
+        duration_hours: durationHours,
+        fallback_price: fallbackPrice,
+        marketplace_since: null,
+        starts_at: startsAt.toISOString(),
+        ends_at: endsAt.toISOString(),
+        current_bid: 0,
+        bid_count: 0,
+        winning_bid_id: null,
+        buyer_id: null,
+        sale_price: null,
+        platform_fee: null,
+        photographer_payout: null,
+        auto_extended: false,
+        extension_count: 0,
+        rights_transferred: false,
+      })
+      .eq("id", auctionId)
+      .eq("status", "archived")
+      .select("id");
+
+    const rows = data as Array<{ id: string }> | null;
+    if (!rows || rows.length === 0)
+      return { error: "Listing is not archived" };
+    return {
+      success: true,
+      status: "active",
+      startsAt: startsAt.toISOString(),
+      endsAt: endsAt.toISOString(),
+    };
+  }
+
+  // marketplace mode: fixed-price, non-exclusive. Restart the 30-day archive clock.
+  // license_count is already 0 (the archive gate), so it needs no reset.
+  const { data } = await supabaseAdmin
+    .from("auctions")
+    .update({
+      status: "marketplace",
+      fallback_price: fallbackPrice,
+      marketplace_since: new Date().toISOString(),
+      rights_transferred: false,
+    })
+    .eq("id", auctionId)
+    .eq("status", "archived")
+    .select("id");
+
+  const rows = data as Array<{ id: string }> | null;
+  if (!rows || rows.length === 0) return { error: "Listing is not archived" };
+  return { success: true, status: "marketplace" };
 }

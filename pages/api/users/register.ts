@@ -24,12 +24,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       .status(400)
       .json({ error: "Role must be photographer or buyer" });
 
-  if (role === "buyer" && (!followerCount || followerCount < 50000)) {
-    return res.status(400).json({
-      error:
-        "Buyer accounts require a minimum 50,000 followers on at least one platform. Submit your channel for manual review.",
-    });
-  }
+  // Buyers are self-service (B10): they land in the default 'marketplace' tier
+  // with instant fixed-price access and no follower minimum or manual review.
+  // The old 50k-follower gate belonged to the retired influencer-only model;
+  // bidding remains a separate verify-to-bid upgrade (bid_status='verified').
 
   if (role === "photographer" && handle) {
     const { data: existing } = await supabaseAdmin

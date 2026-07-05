@@ -12,6 +12,17 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!user) return res.status(401).json({ error: "Unauthorized" });
 
   const u = user as DbUser;
+  // B6: explicit marketplace-tier reject. Bidding is the 'verified' tier's
+  // privilege; the self-service tier licenses fixed-price content instead.
+  // Legacy verified bidders may still carry buyer_tier='marketplace' (the B1
+  // migration deliberately didn't backfill), so the tier only rejects callers
+  // the bid_status gate would refuse anyway — it names the reason and the
+  // upgrade path instead of the generic error below.
+  if (u.buyer_tier === "marketplace" && u.bid_status !== "verified")
+    return res.status(403).json({
+      error:
+        "Marketplace accounts can license content instantly but cannot bid. Request bidding verification to join auctions.",
+    });
   if (u.bid_status !== "verified")
     return res
       .status(403)

@@ -379,7 +379,10 @@ async function clear() {
       await db.from("bids").delete().in("auction_id", auctionIds);
       // license_acceptances.transaction_id has no cascade — clear them before
       // their transactions so transaction deletes aren't blocked.
-      await db.from("license_acceptances").delete().in("content_id", auctionIds);
+      await db
+        .from("license_acceptances")
+        .delete()
+        .in("content_id", auctionIds);
       await db.from("transactions").delete().in("auction_id", auctionIds);
       await db.from("auctions").delete().in("id", auctionIds);
     }

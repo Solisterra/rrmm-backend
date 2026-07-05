@@ -59,6 +59,17 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       .single();
     if (error) return res.status(500).json({ error: error.message });
 
+    // Approved bidding also promotes the buyer out of the self-service
+    // 'marketplace' tier — the bid API rejects that tier explicitly (B6), so the
+    // two fields must move together. Separate statement so a live DB where the
+    // buyer_tier migration lags can't fail the approval itself.
+    if (capability === "buyer" && decision === "approved") {
+      await supabaseAdmin
+        .from("users")
+        .update({ buyer_tier: "verified" })
+        .eq("id", userId);
+    }
+
     await supabaseAdmin.from("notifications").insert({
       user_id: userId,
       type: decision === "approved" ? "content_approved" : "content_rejected",

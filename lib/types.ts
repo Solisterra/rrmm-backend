@@ -261,6 +261,25 @@ export interface ActivateAuctionResult {
   error?: string;
 }
 
+// Relist an archived listing (B9). `auction` starts a fresh auction (needs a
+// reserve + duration, optional fallback price); `marketplace` puts it straight
+// back up at a fixed price (needs fallbackPrice).
+export interface RelistListingParams {
+  auctionId: string;
+  mode: "auction" | "marketplace";
+  reservePrice?: number; // required for auction mode
+  durationHours?: number; // required for auction mode
+  fallbackPrice?: number | null; // required for marketplace mode; optional for auction
+}
+
+export interface RelistListingResult {
+  success?: boolean;
+  status?: AuctionStatus; // the new listing status on success
+  startsAt?: string; // auction mode only
+  endsAt?: string; // auction mode only
+  error?: string;
+}
+
 // Result of the archive sweep on a single stale marketplace listing.
 // `archived` is false when the race-guarded conditional UPDATE matched no row —
 // an in-flight purchase bumped license_count, or the listing was already archived.
@@ -409,6 +428,21 @@ export interface FormattedMarketItem {
   preview_url: string | null;
   watermark_url: string | null;
   isNew: boolean;
+}
+
+// A photographer's own archived listing (30-day stale marketplace content whose
+// rights reverted, B3) — the relist candidate the seller dashboard renders.
+export interface FormattedArchivedListing {
+  id: string;
+  photographer_id: string;
+  title: string;
+  category: AuctionCategory;
+  emoji: string;
+  exclusive: Exclusivity;
+  price: number;
+  preview_url: string | null;
+  watermark_url: string | null;
+  archivedAt: string;
 }
 
 export interface FormattedApplication {

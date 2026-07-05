@@ -195,6 +195,16 @@ CREATE TRIGGER trg_auction_sold AFTER UPDATE ON auctions FOR EACH ROW EXECUTE FU
 -- 'marketplace'/'archived' statuses above are also created by that migration.
 
 -- ── BUYER APPLICATIONS ────────────────────────────────────────────────────
+-- Generation expressions can't contain subqueries (Postgres restriction), so the
+-- follower sum lives in an IMMUTABLE helper the generated column calls.
+CREATE OR REPLACE FUNCTION buyer_apps_total_followers(platforms JSONB)
+RETURNS INTEGER
+LANGUAGE SQL IMMUTABLE AS $$
+  SELECT COALESCE(SUM((p->>'followers')::INTEGER), 0)::INTEGER
+  FROM jsonb_array_elements(platforms) p
+  WHERE p->>'followers' ~ '^\d+$'
+$$;
+
 CREATE TABLE buyer_applications (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name            TEXT NOT NULL,
@@ -204,11 +214,7 @@ CREATE TABLE buyer_applications (
   note            TEXT,
   platforms       JSONB NOT NULL DEFAULT '[]',  -- [{name, url, followers}]
   total_followers INTEGER GENERATED ALWAYS AS (
-    COALESCE((
-      SELECT SUM((p->>'followers')::INTEGER)
-      FROM jsonb_array_elements(platforms) p
-      WHERE p->>'followers' ~ '^\d+$'
-    ), 0)
+    buyer_apps_total_followers(platforms)
   ) STORED,
   status          TEXT NOT NULL DEFAULT 'pending'
                     CHECK (status IN ('pending','approved','rejected')),
