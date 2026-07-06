@@ -3,6 +3,7 @@ import { withErrorHandling } from "../../../../lib/api";
 import { getUserFromRequest, supabaseAdmin } from "../../../../lib/supabase";
 import { createCheckoutSession } from "../../../../lib/stripe";
 import { computeSplit } from "../../../../lib/money";
+import { LICENSE_VERSION, LICENSE_LEGAL_TEXT } from "../../../../lib/license";
 import type { DbUser, DbAuction } from "../../../../lib/types";
 
 // First configured frontend origin — where Checkout redirects the buyer back to.
@@ -36,6 +37,16 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       .status(400)
       .json({ error: "Payment method required. Please add a card first." });
 
+  // Click-through license is part of checkout itself: the buyer must accept the
+  // non-exclusive terms in the purchase request, and the acceptance is recorded
+  // immutably below BEFORE the Stripe session is created. A UI cannot skip it.
+  const { agreement_accepted } = req.body as { agreement_accepted?: boolean };
+  if (agreement_accepted !== true)
+    return res.status(400).json({
+      error: "You must accept the non-exclusive license terms to continue.",
+      license: { version: LICENSE_VERSION, text: LICENSE_LEGAL_TEXT },
+    });
+
   const { data: listing } = await supabaseAdmin
     .from("auctions")
     .select("*, users!photographer_id(stripe_account_id)")
@@ -54,6 +65,31 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     return res
       .status(403)
       .json({ error: "You cannot license your own content" });
+
+  // Without a Connect account there is no destination for the photographer's 80%
+  // — Stripe would settle the full amount to the platform with no payout path.
+  // Block the sale rather than silently keeping the photographer's share.
+  if (!a.users?.stripe_account_id)
+    return res.status(409).json({
+      error:
+        "This photographer has not completed payout onboarding yet. Please try again later.",
+    });
+
+  // A license is perpetual and non-exclusive — the same buyer paying twice for
+  // the same content is a mistake, not a feature. (Different buyers licensing
+  // the same content is the whole point and stays unlimited.)
+  const { data: priorTx } = await supabaseAdmin
+    .from("transactions")
+    .select("id")
+    .eq("auction_id", a.id)
+    .eq("buyer_id", u.id)
+    .eq("payment_status", "succeeded")
+    .limit(1)
+    .maybeSingle();
+  if (priorTx)
+    return res.status(409).json({
+      error: "You already hold a license for this content.",
+    });
 
   // Same money split the auction engine uses (single source of truth, lib/money).
   const {
@@ -84,6 +120,38 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       .json({ error: txErr?.message ?? "Could not start purchase" });
 
   const transactionId = (tx as { id: string }).id;
+
+  // Record the click-through acceptance immutably (buyer, content, transaction,
+  // timestamp, IP/UA/session, frozen license text) — the license analog of the
+  // listing attestation. If it can't be recorded, the purchase must not proceed:
+  // roll back the pending transaction and fail, mirroring createAuction's
+  // attestation rollback. (POST .../accept-license remains as the idempotent
+  // read-back of this record.)
+  const { error: licErr } = await supabaseAdmin
+    .from("license_acceptances")
+    .insert({
+      buyer_id: u.id,
+      content_id: a.id,
+      transaction_id: transactionId,
+      agreement_accepted: true,
+      accepted_at: new Date().toISOString(),
+      ip_address:
+        (req.headers["x-forwarded-for"] as string) ||
+        req.socket?.remoteAddress ||
+        "unknown",
+      user_agent: req.headers["user-agent"] || "unknown",
+      session_id: (req.headers["x-session-id"] as string | undefined) ?? null,
+      license_version: LICENSE_VERSION,
+      legal_text_snapshot: LICENSE_LEGAL_TEXT,
+    });
+  if (licErr) {
+    await supabaseAdmin.from("transactions").delete().eq("id", transactionId);
+    return res.status(500).json({
+      error: "Could not record license acceptance. Purchase not started.",
+      detail: licErr.message,
+    });
+  }
+
   const origin = frontendOrigin();
   const session = await createCheckoutSession({
     amount: grossAmount,

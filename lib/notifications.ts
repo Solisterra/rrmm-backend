@@ -70,16 +70,29 @@ async function createNotification({
     console.error(`Notification insert threw (${type}):`, (e as Error).message);
   }
 
+  // select("*") rather than naming columns: `phone` arrives via
+  // phone_migration.sql, and a hand-applied migration lagging a deploy must
+  // degrade to "no SMS", never to a failed lookup that kills email too.
   const { data: user } = await supabaseAdmin
     .from("users")
-    .select("email, display_name")
+    .select("*")
     .eq("id", userId)
     .single();
   if (!user) return;
 
-  if (sendSMS && process.env.TWILIO_ACCOUNT_SID) {
+  const phone = (user as { phone?: string | null }).phone;
+  if (
+    sendSMS &&
+    process.env.TWILIO_ACCOUNT_SID &&
+    process.env.TWILIO_FROM_NUMBER &&
+    phone
+  ) {
     try {
-      getTwilio(); // initialise — phone lookup handled in production
+      await getTwilio().messages.create({
+        to: phone,
+        from: process.env.TWILIO_FROM_NUMBER,
+        body: `${title} — ${body}`,
+      });
     } catch (e) {
       console.error("SMS error:", (e as Error).message);
     }
@@ -306,5 +319,8 @@ export async function notifyContentArchived({
     title: "🗄️ Listing archived",
     body: `"${(auction as { title: string } | null)?.title}" spent 30 days on the marketplace without a license and has been archived. The rights have reverted to you — relist it anytime to put it back up for sale.`,
     sendEmail: true,
+    // Spec requires email AND SMS for the archive notice (skipped per-user when
+    // no phone is on file).
+    sendSMS: true,
   });
 }

@@ -63,6 +63,7 @@ export interface DbUser {
   email: string;
   handle: string | null;
   display_name: string | null;
+  phone: string | null;
   role: Role;
   verified: boolean;
   buyer_tier: BuyerTier;

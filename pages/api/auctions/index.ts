@@ -74,6 +74,7 @@ async function createAuction(req: NextApiRequest, res: NextApiResponse) {
     file_size_mb,
     reserve_price,
     duration_hours,
+    fallback_price,
     event_tag,
     attestation,
   } = req.body as {
@@ -88,6 +89,7 @@ async function createAuction(req: NextApiRequest, res: NextApiResponse) {
     file_size_mb?: number;
     reserve_price?: number;
     duration_hours?: number;
+    fallback_price?: number | string | null;
     event_tag?: string;
     attestation?: AttestationPayload;
   };
@@ -107,6 +109,22 @@ async function createAuction(req: NextApiRequest, res: NextApiResponse) {
   }
   if (![2, 4, 6].includes(parseInt(String(duration_hours)))) {
     return res.status(400).json({ error: "Duration must be 2, 4, or 6 hours" });
+  }
+
+  // Optional marketplace fallback price: the fixed, non-exclusive price the
+  // listing sells at if the auction ends with no winning bid. Left blank, the
+  // listing goes 'unsold' and rights revert as before. The 25–40%-of-reserve
+  // guidance is a UI recommendation, not a server rule — only positivity is
+  // enforced here.
+  let fallbackPrice: number | null = null;
+  if (fallback_price != null && String(fallback_price) !== "") {
+    fallbackPrice = parseFloat(String(fallback_price));
+    if (isNaN(fallbackPrice) || fallbackPrice <= 0)
+      return res.status(400).json({
+        error: "Fallback price must be greater than 0",
+        detail:
+          "Recommended: 25–40% of your reserve. Lower prices attract more buyers.",
+      });
   }
 
   if (!attestation) {
@@ -158,6 +176,7 @@ async function createAuction(req: NextApiRequest, res: NextApiResponse) {
       file_size_mb,
       reserve_price: parseFloat(String(reserve_price)),
       duration_hours: parseInt(String(duration_hours)),
+      fallback_price: fallbackPrice,
       event_tag,
       status: "pending",
     })

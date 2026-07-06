@@ -60,7 +60,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   return res.status(200).json({ received: true });
 }
 
-async function handlePaymentSucceeded(paymentIntent: Stripe.PaymentIntent) {
+// Exported for unit testing (not a route export — Next only treats `default`/`config` specially).
+export async function handlePaymentSucceeded(
+  paymentIntent: Stripe.PaymentIntent,
+) {
   const tx = await resolveTransaction(paymentIntent);
   if (!tx) {
     console.error(
@@ -68,6 +71,12 @@ async function handlePaymentSucceeded(paymentIntent: Stripe.PaymentIntent) {
     );
     return;
   }
+
+  // Stripe retries deliveries on any non-2xx, so this handler must be
+  // idempotent. Settlement is the one-way latch: once this transaction is
+  // 'succeeded', a redelivery must not bump license_count again or re-send
+  // buyer/photographer notifications.
+  if (tx.payment_status === "succeeded") return;
 
   // Settle THIS transaction by its id — never by auction_id. A marketplace listing
   // has many transactions (one per non-exclusive license); keying off auction_id
@@ -184,6 +193,19 @@ export async function deliverMarketplaceLicense(
     .update({ license_count: (a.license_count ?? 0) + 1 })
     .eq("id", a.id);
 
+  // Archive-vs-payment race: the 30-day sweep can archive the listing while this
+  // buyer is mid-checkout (transaction still pending, count still 0). The listing
+  // now has a paid license, so "stays listed after each sale" applies — restore
+  // it. Conditional on status='archived' so a listing the photographer already
+  // relisted as a live auction is left untouched.
+  if (a.status === "archived") {
+    await supabaseAdmin
+      .from("auctions")
+      .update({ status: "marketplace" })
+      .eq("id", a.id)
+      .eq("status", "archived");
+  }
+
   await supabaseAdmin.from("notifications").insert({
     user_id: tx.buyer_id,
     type: "payment_received",
@@ -235,14 +257,26 @@ export async function resolveTransaction(
   return (data as DbTransaction) ?? null;
 }
 
-async function handleTransferCreated(transfer: Stripe.Transfer) {
+// Exported for unit testing.
+export async function handleTransferCreated(transfer: Stripe.Transfer) {
+  // Destination charges: Stripe creates the transfer itself, so nothing in our
+  // code ever knew the transfer id up front. The join key we DO hold is the
+  // charge — transfer.source_transaction is the charge id we stored on the
+  // transaction at settlement (charge_id). Record the transfer id and mark the
+  // payout settled.
+  const chargeId =
+    typeof transfer.source_transaction === "string"
+      ? transfer.source_transaction
+      : transfer.source_transaction?.id;
+  if (!chargeId) return;
   await supabaseAdmin
     .from("transactions")
     .update({
+      payout_id: transfer.id,
       payout_status: "paid",
       payout_completed_at: new Date().toISOString(),
     })
-    .eq("payout_id", transfer.id);
+    .eq("charge_id", chargeId);
 }
 
 async function handlePayoutPaid(payout: Stripe.Payout) {

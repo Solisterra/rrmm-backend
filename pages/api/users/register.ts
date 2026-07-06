@@ -7,7 +7,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST")
     return res.status(405).json({ error: "POST only" });
 
-  const { authId, email, displayName, handle, role, followerCount } =
+  const { authId, email, displayName, handle, role, followerCount, phone } =
     req.body as {
       authId?: string;
       email?: string;
@@ -15,6 +15,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       handle?: string;
       role?: string;
       followerCount?: number;
+      phone?: string;
     };
 
   if (!authId || !email || !role)
@@ -59,6 +60,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       email,
       display_name: displayName,
       handle,
+      // Only reference the column when a phone was given — keeps registration
+      // working if phone_migration.sql hasn't been applied yet.
+      ...(phone ? { phone } : {}),
       role,
       follower_count: followerCount || 0,
       stripe_customer_id: stripeCustomerId,

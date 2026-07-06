@@ -10,6 +10,7 @@ CREATE TABLE users (
   email TEXT UNIQUE NOT NULL,
   handle TEXT UNIQUE,
   display_name TEXT,
+  phone TEXT,                            -- E.164; optional, used for SMS notifications
   role TEXT NOT NULL CHECK (role IN ('photographer','buyer','admin')),
   verified BOOLEAN DEFAULT FALSE,
   buyer_tier TEXT NOT NULL DEFAULT 'marketplace' CHECK (buyer_tier IN ('marketplace','verified')),

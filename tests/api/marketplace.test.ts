@@ -33,9 +33,16 @@ beforeEach(async () => {
 });
 
 describe("POST /api/marketplace/[id]/purchase", () => {
-  function run(body: { user?: unknown; method?: string } = {}) {
-    db.getUserFromRequest.mockResolvedValue(body.user ?? null);
-    const req = mockReq({ method: body.method ?? "POST", query: { id: "auction-1" } });
+  function run(
+    opts: { user?: unknown; method?: string; body?: unknown } = {},
+  ) {
+    db.getUserFromRequest.mockResolvedValue(opts.user ?? null);
+    const req = mockReq({
+      method: opts.method ?? "POST",
+      query: { id: "auction-1" },
+      // Checkout includes the click-through license; tests opt out explicitly.
+      body: opts.body ?? { agreement_accepted: true },
+    });
     const res = mockRes();
     return purchase(req, res).then(() => res);
   }
@@ -141,7 +148,7 @@ describe("POST /api/marketplace/[id]/purchase", () => {
     );
   });
 
-  it("propagates a destination charge of null when the photographer has no Connect account", async () => {
+  it("409s when the photographer has no Connect account (no payout destination)", async () => {
     db.setResolver(({ table, terminal }: ResolveCtx) => {
       if (table === "auctions" && terminal === "single")
         return {
@@ -153,16 +160,114 @@ describe("POST /api/marketplace/[id]/purchase", () => {
           }),
           error: null,
         };
+      return { data: null, error: null };
+    });
+
+    const res = await run({ user: makeUser({ id: "buyer-1" }) });
+    expect(res.statusCode).toBe(409);
+    // The sale never starts: no transaction, no checkout session.
+    expect(db.inserts("transactions")).toHaveLength(0);
+    expect(createCheckoutSession).not.toHaveBeenCalled();
+  });
+
+  it("400s (with the license terms) when the click-through is not accepted", async () => {
+    const res = await run({
+      user: makeUser({ id: "buyer-1" }),
+      body: {},
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.body as { license?: { version: string; text: string } };
+    expect(body.license?.version).toBe("v1.0");
+    expect(body.license?.text).toBe(LICENSE_LEGAL_TEXT);
+    expect(db.inserts("transactions")).toHaveLength(0);
+  });
+
+  it("409s when the buyer already holds a license for this content", async () => {
+    db.setResolver(({ table, terminal }: ResolveCtx) => {
+      if (table === "auctions" && terminal === "single")
+        return {
+          data: makeAuction({
+            status: "marketplace",
+            fallback_price: 250,
+            photographer_id: "photographer-1",
+            users: { stripe_account_id: "acct_1" },
+          }),
+          error: null,
+        };
+      // Duplicate guard probe: buyer already has a succeeded transaction.
+      if (table === "transactions" && terminal === "maybeSingle")
+        return { data: { id: "tx-old" }, error: null };
+      return { data: null, error: null };
+    });
+
+    const res = await run({ user: makeUser({ id: "buyer-1" }) });
+    expect(res.statusCode).toBe(409);
+    expect(db.inserts("transactions")).toHaveLength(0);
+    expect(createCheckoutSession).not.toHaveBeenCalled();
+  });
+
+  it("records the license acceptance immutably before creating the checkout", async () => {
+    db.setResolver(({ table, terminal }: ResolveCtx) => {
+      if (table === "auctions" && terminal === "single")
+        return {
+          data: makeAuction({
+            id: "auction-1",
+            status: "marketplace",
+            fallback_price: 250,
+            photographer_id: "photographer-1",
+            users: { stripe_account_id: "acct_1" },
+          }),
+          error: null,
+        };
       if (table === "transactions" && terminal === "single")
-        return { data: { id: "tx-1" }, error: null };
+        return { data: { id: "tx-77" }, error: null };
       return { data: null, error: null };
     });
     createCheckoutSession.mockResolvedValue({ url: "https://checkout" });
 
-    await run({ user: makeUser({ id: "buyer-1" }) });
-    expect(createCheckoutSession).toHaveBeenCalledWith(
-      expect.objectContaining({ photographerAccountId: null }),
-    );
+    const res = await run({
+      user: makeUser({ id: "buyer-1", stripe_customer_id: "cus_123" }),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const acceptance = db.inserts("license_acceptances")[0];
+    expect(acceptance).toMatchObject({
+      buyer_id: "buyer-1",
+      content_id: "auction-1",
+      transaction_id: "tx-77",
+      agreement_accepted: true,
+      license_version: "v1.0",
+    });
+    expect(acceptance.legal_text_snapshot).toBe(LICENSE_LEGAL_TEXT);
+  });
+
+  it("rolls back the pending transaction when the acceptance cannot be recorded", async () => {
+    db.setResolver(({ table, terminal }: ResolveCtx) => {
+      if (table === "auctions" && terminal === "single")
+        return {
+          data: makeAuction({
+            status: "marketplace",
+            fallback_price: 250,
+            photographer_id: "photographer-1",
+            users: { stripe_account_id: "acct_1" },
+          }),
+          error: null,
+        };
+      if (table === "transactions" && terminal === "single")
+        return { data: { id: "tx-77" }, error: null };
+      if (table === "license_acceptances" && terminal === "await")
+        return { data: null, error: { message: "insert blocked" } };
+      return { data: null, error: null };
+    });
+
+    const res = await run({ user: makeUser({ id: "buyer-1" }) });
+    expect(res.statusCode).toBe(500);
+    expect(createCheckoutSession).not.toHaveBeenCalled();
+    // The orphaned pending transaction is deleted.
+    const txOps = db.log
+      .filter((e) => e.table === "transactions")
+      .flatMap((e) => e.ops);
+    expect(txOps.some((o) => o.m === "delete")).toBe(true);
   });
 });
 
@@ -225,6 +330,41 @@ describe("GET /api/marketplace/[id] — per-buyer delivery", () => {
     });
     const body = res.body as { downloadUrl: string | null };
     expect(body.downloadUrl).toBeNull();
+  });
+
+  it("hides a no-longer-marketplace listing from viewers without a license", async () => {
+    const res = await run(makeUser({ id: "buyer-1" }), ({ table, terminal }) => {
+      if (table === "auctions" && terminal === "single")
+        return {
+          data: { ...marketplaceListing(), status: "archived" },
+          error: null,
+        };
+      if (table === "transactions" && terminal === "maybeSingle")
+        return { data: null, error: null };
+      return { data: null, error: null };
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("keeps a paid license retrievable after the listing leaves the marketplace", async () => {
+    db.setSignedUrl("https://signed.example/perpetual.jpg");
+    const res = await run(makeUser({ id: "buyer-1" }), ({ table, terminal }) => {
+      if (table === "auctions" && terminal === "single")
+        return {
+          data: { ...marketplaceListing(), status: "archived" },
+          error: null,
+        };
+      if (table === "transactions" && terminal === "maybeSingle")
+        return { data: { id: "tx-1" }, error: null }; // license already settled
+      return { data: null, error: null };
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect((res.body as { downloadUrl: string | null }).downloadUrl).toBe(
+      "https://signed.example/perpetual.jpg",
+    );
+    // Archived listings don't accrue marketplace view counts.
+    expect(db.updates("auctions")).toHaveLength(0);
   });
 });
 

@@ -62,6 +62,21 @@ describe("POST /api/users/register — self-service buyer tier (B10)", () => {
     expect("buyer_tier" in inserts[0]).toBe(false);
   });
 
+  it("stores an optional phone for SMS notifications", async () => {
+    await run({
+      authId: "auth-9",
+      email: "new@example.com",
+      role: "buyer",
+      phone: "+15551234567",
+    });
+    expect(db.inserts("users")[0]).toMatchObject({ phone: "+15551234567" });
+  });
+
+  it("omits the phone column entirely when not provided (pre-migration safe)", async () => {
+    await run({ authId: "auth-9", email: "new@example.com", role: "buyer" });
+    expect("phone" in db.inserts("users")[0]).toBe(false);
+  });
+
   it("still requires authId, email and role", async () => {
     const res = await run({ role: "buyer" });
     expect(res.statusCode).toBe(400);

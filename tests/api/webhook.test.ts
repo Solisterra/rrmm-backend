@@ -55,6 +55,106 @@ describe("resolveTransaction", () => {
   });
 });
 
+describe("handlePaymentSucceeded — idempotent settlement", () => {
+  it("short-circuits when the transaction is already settled (Stripe redelivery)", async () => {
+    db.setResolver(({ table, terminal }: ResolveCtx) =>
+      table === "transactions" && terminal === "single"
+        ? {
+            data: makeTransaction({
+              id: "tx-1",
+              payment_status: "succeeded",
+            }),
+            error: null,
+          }
+        : { data: null, error: null },
+    );
+
+    await webhook.handlePaymentSucceeded(
+      pi({ transaction_id: "tx-1", purchase_type: "marketplace" }),
+    );
+
+    // Nothing is re-written: no second license_count bump, no re-notification.
+    expect(db.updates("transactions")).toHaveLength(0);
+    expect(db.updates("auctions")).toHaveLength(0);
+    expect(db.inserts("notifications")).toHaveLength(0);
+  });
+
+  it("settles a pending marketplace transaction exactly once", async () => {
+    db.setResolver(({ table, terminal }: ResolveCtx) => {
+      if (table === "transactions" && terminal === "single")
+        return {
+          data: makeTransaction({
+            id: "tx-1",
+            auction_id: "auction-1",
+            buyer_id: "buyer-1",
+            photographer_id: "photographer-1",
+            payment_status: "pending",
+            photographer_payout: 200,
+          }),
+          error: null,
+        };
+      if (table === "auctions" && terminal === "single")
+        return {
+          data: makeAuction({
+            id: "auction-1",
+            status: "marketplace",
+            license_count: 0,
+            full_url: "p/file.jpg",
+          }),
+          error: null,
+        };
+      if (table === "users" && terminal === "single")
+        return {
+          data: { id: "photographer-1", stripe_account_id: "acct_1" },
+          error: null,
+        };
+      return { data: null, error: null };
+    });
+
+    await webhook.handlePaymentSucceeded(
+      pi({ transaction_id: "tx-1", purchase_type: "marketplace" }),
+    );
+
+    expect(db.updates("transactions")).toContainEqual(
+      expect.objectContaining({
+        payment_status: "succeeded",
+        payment_intent_id: "pi_1",
+      }),
+    );
+    expect(db.updates("auctions")).toContainEqual({ license_count: 1 });
+    expect(db.updates("transactions")).toContainEqual(
+      expect.objectContaining({ payout_status: "in_transit" }),
+    );
+  });
+});
+
+describe("handleTransferCreated — payout reconciliation by charge", () => {
+  it("marks the payout settled on the transaction matching the source charge", async () => {
+    await webhook.handleTransferCreated({
+      id: "tr_9",
+      source_transaction: "ch_42",
+    } as unknown as Stripe.Transfer);
+
+    expect(db.updates("transactions")).toContainEqual(
+      expect.objectContaining({ payout_id: "tr_9", payout_status: "paid" }),
+    );
+    // Joined on the charge id we stored at settlement — not on a payout_id
+    // nothing ever wrote.
+    const ops = db.log
+      .filter((e) => e.table === "transactions")
+      .flatMap((e) => e.ops);
+    expect(ops).toContainEqual({ m: "eq", args: ["charge_id", "ch_42"] });
+  });
+
+  it("does nothing when the transfer has no source charge", async () => {
+    await webhook.handleTransferCreated({
+      id: "tr_9",
+      source_transaction: null,
+    } as unknown as Stripe.Transfer);
+    expect(db.updates("transactions")).toHaveLength(0);
+  });
+});
+
 describe("deliverMarketplaceLicense — non-exclusive, listing stays live", () => {
   const auction = (): DbAuction =>
     makeAuction({ id: "auction-1", license_count: 4, full_url: "p/file.jpg" });
@@ -83,6 +183,30 @@ describe("deliverMarketplaceLicense — non-exclusive, listing stays live", () =
       auction_id: "auction-1",
     });
     expect(String(note.title)).toContain("License");
+  });
+
+  it("restores a listing archived mid-checkout (it now has a paid license)", async () => {
+    await webhook.deliverMarketplaceLicense(
+      makeAuction({ id: "auction-1", status: "archived", license_count: 0 }),
+      tx(),
+    );
+    expect(db.updates("auctions")).toContainEqual({ status: "marketplace" });
+    // Conditional flip: only from 'archived' — a listing already relisted as a
+    // live auction must be left untouched.
+    const ops = db.log
+      .filter((e) => e.table === "auctions")
+      .flatMap((e) => e.ops);
+    expect(ops).toContainEqual({ m: "eq", args: ["status", "archived"] });
+  });
+
+  it("leaves a relisted (non-archived) listing's status untouched", async () => {
+    await webhook.deliverMarketplaceLicense(
+      makeAuction({ id: "auction-1", status: "active", license_count: 0 }),
+      tx(),
+    );
+    for (const u of db.updates("auctions")) {
+      expect(u).not.toHaveProperty("status");
+    }
   });
 });
 

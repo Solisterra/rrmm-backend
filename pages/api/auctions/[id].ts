@@ -83,9 +83,28 @@ async function updateAuction(
     "event_tag",
     "is_featured",
   ] as const;
-  const updates: Partial<Record<(typeof allowedFields)[number], unknown>> = {};
+  const updates: Partial<
+    Record<(typeof allowedFields)[number] | "fallback_price", unknown>
+  > = {};
   for (const field of allowedFields) {
     if (req.body[field] !== undefined) updates[field] = req.body[field];
+  }
+
+  // The marketplace fallback price may be added, changed, or cleared (null) on a
+  // listing that isn't live — e.g. while pending review — so a photographer isn't
+  // locked out of the marketplace fallback just because they skipped it at
+  // creation. Explicit null clears it (reverts to unsold-on-no-bid behavior).
+  if (req.body.fallback_price !== undefined) {
+    if (req.body.fallback_price === null || req.body.fallback_price === "") {
+      updates.fallback_price = null;
+    } else {
+      const fb = parseFloat(String(req.body.fallback_price));
+      if (isNaN(fb) || fb <= 0)
+        return res
+          .status(400)
+          .json({ error: "Fallback price must be greater than 0" });
+      updates.fallback_price = fb;
+    }
   }
 
   const { data, error } = await supabaseAdmin

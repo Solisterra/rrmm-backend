@@ -17,6 +17,7 @@ export function makeUser(overrides: Partial<DbUser> = {}): DbUser {
     email: "buyer@example.com",
     handle: "buyer",
     display_name: "Buyer One",
+    phone: null,
     role: "buyer",
     verified: true,
     buyer_tier: "marketplace",
