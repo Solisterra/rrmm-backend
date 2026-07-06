@@ -1,28 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { getAllowedOrigin } from "./lib/cors";
 
 // ---------------------------------------------------------------------------
-// CORS — origin allowlist
+// CORS
 // A static value in next.config.js can't distinguish prod, preview deploys,
 // and localhost, so CORS is handled here per-request: if the Origin matches
-// a known entry, reflect it back; otherwise emit no CORS headers.
+// an entry in the shared allowlist (lib/cors.ts), reflect it back; otherwise
+// emit no CORS headers.
 // ---------------------------------------------------------------------------
-const ALLOWED_ORIGINS: Array<string | RegExp> = [
-  "https://rrmm-frontend.vercel.app",
-  "http://localhost:5173",
-  "http://localhost:3000",
-  // Vercel preview deploys for the frontend project
-  /^https:\/\/rrmm-frontend-[a-z0-9-]+\.vercel\.app$/,
-];
-
-function getAllowedOrigin(origin: string | null): string | null {
-  if (!origin) return null;
-  for (const entry of ALLOWED_ORIGINS) {
-    if (typeof entry === "string" ? entry === origin : entry.test(origin)) {
-      return origin;
-    }
-  }
-  return null;
-}
 
 function corsHeaders(origin: string | null): Record<string, string> {
   const allowed = getAllowedOrigin(origin);

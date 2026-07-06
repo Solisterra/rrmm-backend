@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { getAllowedOrigin } from "./cors";
 
 const NETWORK_ERROR_CODES = new Set([
   "ECONNREFUSED",
@@ -8,32 +9,28 @@ const NETWORK_ERROR_CODES = new Set([
   "EPIPE",
 ]);
 
-// Comma-separated list of allowed frontend origins, e.g.:
-//   FRONTEND_URL=https://rrmm-frontend.vercel.app,http://localhost:5173
-const ALLOWED_ORIGINS = (process.env.FRONTEND_URL ?? "http://localhost:5173")
-  .split(",")
-  .map((o) => o.trim())
-  .filter(Boolean);
-
 function applyCors(req: NextApiRequest, res: NextApiResponse) {
-  const origin = req.headers.origin ?? "";
-  const allowed = ALLOWED_ORIGINS.includes(origin)
-    ? origin
-    : ALLOWED_ORIGINS[0];
-  res.setHeader("Access-Control-Allow-Origin", allowed);
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET,POST,PATCH,DELETE,OPTIONS",
-  );
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Authorization,Content-Type,X-Request-ID",
-  );
-  res.setHeader(
-    "Access-Control-Expose-Headers",
-    "X-Request-ID,X-RateLimit-Limit,X-RateLimit-Remaining",
-  );
+  // Same allowlist as proxy.ts (lib/cors.ts). Reflect the origin only when it
+  // matches — echoing a fallback origin for unknown callers would stamp the
+  // wrong Access-Control-Allow-Origin on responses the proxy already vetted.
+  const allowed = getAllowedOrigin(req.headers.origin);
+  if (allowed) {
+    res.setHeader("Access-Control-Allow-Origin", allowed);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader(
+      "Access-Control-Allow-Methods",
+      "GET,POST,PATCH,DELETE,OPTIONS",
+    );
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Authorization,Content-Type,X-Request-ID",
+    );
+    res.setHeader(
+      "Access-Control-Expose-Headers",
+      "X-Request-ID,X-RateLimit-Limit,X-RateLimit-Remaining",
+    );
+  }
+  res.setHeader("Vary", "Origin");
   res.setHeader("Cache-Control", "no-store");
 }
 
