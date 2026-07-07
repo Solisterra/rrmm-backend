@@ -72,6 +72,7 @@ async function createAuction(req: NextApiRequest, res: NextApiResponse) {
     watermark_url,
     full_url,
     file_size_mb,
+    listing_type,
     reserve_price,
     duration_hours,
     fallback_price,
@@ -87,6 +88,7 @@ async function createAuction(req: NextApiRequest, res: NextApiResponse) {
     watermark_url?: string;
     full_url?: string;
     file_size_mb?: number;
+    listing_type?: string;
     reserve_price?: number;
     duration_hours?: number;
     fallback_price?: number | string | null;
@@ -94,21 +96,30 @@ async function createAuction(req: NextApiRequest, res: NextApiResponse) {
     attestation?: AttestationPayload;
   };
 
-  if (
-    !title ||
-    !category ||
-    !content_type ||
-    !exclusivity ||
-    !preview_url ||
-    !reserve_price
-  ) {
+  // How the content sells. 'auction' (default) is the existing timed-bidding
+  // path; 'marketplace' skips the auction entirely and, once approved, lists
+  // at a fixed non-exclusive price (fallback_price doubles as that price).
+  const listingType = listing_type ?? "auction";
+  if (!["auction", "marketplace"].includes(listingType))
+    return res
+      .status(400)
+      .json({ error: "listing_type must be 'auction' or 'marketplace'" });
+  const isMarketplace = listingType === "marketplace";
+
+  if (!title || !category || !content_type || !preview_url) {
     return res.status(400).json({ error: "Missing required content fields" });
   }
-  if (reserve_price < 25) {
-    return res.status(400).json({ error: "Minimum reserve price is $25" });
-  }
-  if (![2, 4, 6].includes(parseInt(String(duration_hours)))) {
-    return res.status(400).json({ error: "Duration must be 2, 4, or 6 hours" });
+  if (!isMarketplace) {
+    if (!exclusivity || !reserve_price)
+      return res.status(400).json({ error: "Missing required content fields" });
+    if (reserve_price < 25) {
+      return res.status(400).json({ error: "Minimum reserve price is $25" });
+    }
+    if (![2, 4, 6].includes(parseInt(String(duration_hours)))) {
+      return res
+        .status(400)
+        .json({ error: "Duration must be 2, 4, or 6 hours" });
+    }
   }
 
   // Optional marketplace fallback price: the fixed, non-exclusive price the
@@ -125,6 +136,17 @@ async function createAuction(req: NextApiRequest, res: NextApiResponse) {
         detail:
           "Recommended: 25–40% of your reserve. Lower prices attract more buyers.",
       });
+  }
+
+  // Direct marketplace listings sell at a fixed non-exclusive price, so the
+  // price itself is required (it rides in fallback_price, same column the
+  // auction path falls back to).
+  if (isMarketplace && fallbackPrice == null) {
+    return res.status(400).json({
+      error: "Marketplace price required",
+      detail:
+        "Set fallback_price — the fixed price buyers license this content at.",
+    });
   }
 
   if (!attestation) {
@@ -169,13 +191,24 @@ async function createAuction(req: NextApiRequest, res: NextApiResponse) {
       description,
       category,
       content_type,
-      exclusivity,
       preview_url,
       watermark_url,
       full_url,
       file_size_mb,
-      reserve_price: parseFloat(String(reserve_price)),
-      duration_hours: parseInt(String(duration_hours)),
+      // Marketplace-direct rows: exclusivity is Non-Exclusive by definition;
+      // reserve_price (NOT NULL) mirrors the price and never gates a bid;
+      // duration_hours keeps its column default (no auction window). A non-null
+      // marketplace_since on a *pending* row is the marker admin review uses to
+      // publish straight to the marketplace instead of activating an auction —
+      // auction-path rows only ever gain it after closing (B2), never while
+      // pending. It is refreshed at approval so the 30-day clock starts then.
+      exclusivity: isMarketplace ? "Non-Exclusive" : exclusivity,
+      reserve_price: isMarketplace
+        ? fallbackPrice
+        : parseFloat(String(reserve_price)),
+      ...(isMarketplace
+        ? { marketplace_since: new Date().toISOString() }
+        : { duration_hours: parseInt(String(duration_hours)) }),
       fallback_price: fallbackPrice,
       event_tag,
       status: "pending",
@@ -237,8 +270,9 @@ async function createAuction(req: NextApiRequest, res: NextApiResponse) {
       attested_at: ar.attested_at,
       version: ar.attestation_version,
     },
-    message:
-      "Listing submitted for review. Attestation recorded. Typically approved within 15 minutes.",
+    message: isMarketplace
+      ? "Listing submitted for review. Attestation recorded. Once approved it goes live on the marketplace at your fixed price."
+      : "Listing submitted for review. Attestation recorded. Typically approved within 15 minutes.",
   });
 }
 

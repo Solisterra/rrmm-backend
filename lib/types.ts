@@ -369,6 +369,9 @@ export interface NotifyContentParams {
   photographerId: string;
   auctionId: string;
   reason?: string;
+  // Approval of a direct-to-marketplace listing (fixed price, no auction) —
+  // switches the approved-notification copy.
+  marketplace?: boolean;
 }
 
 // Seller-facing: their stale marketplace listing was archived (30d, no licenses).

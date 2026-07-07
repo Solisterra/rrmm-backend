@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import Stripe from "stripe";
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
@@ -11,6 +12,60 @@ const db = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
+
+// ── Stripe enrichment (test mode only) ────────────────────────────────────────
+// Without real test-mode Stripe objects the seeded world can't complete a
+// checkout: purchase requires the buyer to hold a stripe_customer_id and the
+// photographer a transfers-capable Connect account (the 409 payout gate).
+// Guarded to sk_test_ so this can never touch live Stripe.
+const stripeKey = process.env.STRIPE_SECRET_KEY || "";
+const stripe = stripeKey.startsWith("sk_test_") ? new Stripe(stripeKey) : null;
+
+// Fully-enabled test Connect account, no onboarding browser flow needed:
+// Custom type + Stripe's test-mode magic values ("address_full_match",
+// ssn_last_4 0000, test routing/account numbers) verify instantly, so
+// destination charges to it succeed.
+async function createTestConnectAccount(email, displayName) {
+  const [first, ...rest] = displayName.split(" ");
+  const account = await stripe.accounts.create({
+    type: "custom",
+    country: "US",
+    email,
+    business_type: "individual",
+    capabilities: {
+      card_payments: { requested: true },
+      transfers: { requested: true },
+    },
+    individual: {
+      first_name: first,
+      last_name: rest.join(" ") || "Seed",
+      email,
+      phone: "+15555550100",
+      dob: { day: 1, month: 1, year: 1990 },
+      address: {
+        line1: "address_full_match",
+        city: "Brownsville",
+        state: "TX",
+        postal_code: "78520",
+        country: "US",
+      },
+      ssn_last_4: "0000",
+    },
+    business_profile: {
+      mcc: "7333",
+      product_description: "Aerospace photography licensing (seed)",
+    },
+    tos_acceptance: { date: Math.floor(Date.now() / 1000), ip: "127.0.0.1" },
+    external_account: {
+      object: "bank_account",
+      country: "US",
+      currency: "usd",
+      routing_number: "110000000",
+      account_number: "000123456789",
+    },
+  });
+  return account.id;
+}
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -423,6 +478,7 @@ async function run() {
       display_name: "Boca Lens",
       role: "photographer",
       verified: true,
+      sell_status: "verified",
     },
     {
       email: "starbase_shots@example.com",
@@ -430,6 +486,7 @@ async function run() {
       display_name: "Starbase Shots",
       role: "photographer",
       verified: true,
+      sell_status: "verified",
     },
     {
       email: "rio_grande_media@example.com",
@@ -437,6 +494,7 @@ async function run() {
       display_name: "Rio Grande Media",
       role: "photographer",
       verified: true,
+      sell_status: "verified",
     },
     {
       email: "boca_chica_sky@example.com",
@@ -444,9 +502,12 @@ async function run() {
       display_name: "Boca Chica Sky",
       role: "photographer",
       verified: true,
+      sell_status: "verified",
     },
   ];
 
+  // Verified-tier bidders (can bid AND buy) — except SpaceExplored, which stays
+  // in the self-service marketplace tier to exercise the bid-rejection path.
   const buyerRows = [
     {
       email: "nasaspaceflight@example.com",
@@ -454,6 +515,8 @@ async function run() {
       display_name: "NASASpaceflight",
       role: "buyer",
       verified: true,
+      buyer_tier: "verified",
+      bid_status: "verified",
       follower_count: 3_000_000,
     },
     {
@@ -462,6 +525,8 @@ async function run() {
       display_name: "Everyday Astronaut",
       role: "buyer",
       verified: true,
+      buyer_tier: "verified",
+      bid_status: "verified",
       follower_count: 1_200_000,
     },
     {
@@ -470,6 +535,8 @@ async function run() {
       display_name: "LabPadre",
       role: "buyer",
       verified: true,
+      buyer_tier: "verified",
+      bid_status: "verified",
       follower_count: 500_000,
     },
     {
@@ -478,9 +545,48 @@ async function run() {
       display_name: "SpaceExplored",
       role: "buyer",
       verified: true,
+      buyer_tier: "marketplace",
+      bid_status: "none",
       follower_count: 250_000,
     },
   ];
+
+  // Real test-mode Stripe objects so checkout works end-to-end. Photographers
+  // get transfers-capable Connect accounts (passes the purchase 409 gate and
+  // receives the 80% destination charge); buyers get bare Customers (Checkout
+  // collects the card at pay time — use 4242 4242 4242 4242).
+  if (stripe) {
+    console.log("  creating test-mode Stripe accounts/customers...");
+    // Connect accounts need Connect enabled on the platform (one-time, at
+    // dashboard.stripe.com/connect). Until then, seed everything else and warn:
+    // purchases will stop at the 409 payout-onboarding gate by design.
+    try {
+      for (const p of photographerRows) {
+        p.stripe_account_id = await createTestConnectAccount(
+          p.email,
+          p.display_name,
+        );
+        p.stripe_account_status = "active";
+      }
+    } catch (err) {
+      console.warn(
+        `  ! Connect accounts skipped: ${err.message}\n` +
+          "    Enable Connect (test mode) at https://dashboard.stripe.com/connect, then re-run the seed to make checkout fully testable.",
+      );
+    }
+    for (const b of buyerRows) {
+      const customer = await stripe.customers.create({
+        email: b.email,
+        name: b.display_name,
+        description: "RRMM seed buyer",
+      });
+      b.stripe_customer_id = customer.id;
+    }
+  } else {
+    console.log(
+      "  (no sk_test_ STRIPE_SECRET_KEY — seeding without Stripe; checkout will stop at the payment-method/onboarding gates)",
+    );
+  }
 
   const { data: photographers, error: pErr } = await db
     .from("users")
@@ -586,6 +692,33 @@ async function run() {
     .select("id, title");
   if (mErr) throw new Error(`marketplace listings: ${mErr.message}`);
   console.log(`  + ${marketplaceListings.length} marketplace listings`);
+
+  // 3c. Archived listing — sat 30+ days on the marketplace with zero licenses,
+  // swept by the archive cron; rights reverted. Feeds the photographer's
+  // archived dashboard (GET /api/users/archived) and the relist flow.
+  const archivedSince = new Date(now - 40 * 24 * 60 * 60_000).toISOString();
+  const archivedRows = [
+    {
+      photographer_id: byHandle["@boca_lens"],
+      title: "Static Fire Smoke Rings — Detail Study",
+      description: "💨 Static Fire Smoke Rings — Detail Study",
+      category: "Test Event",
+      content_type: "photo",
+      exclusivity: "Non-Exclusive",
+      preview_url: `https://placehold.co/800x600?text=${encodeURIComponent("Static Fire Smoke Rings")}`,
+      status: "archived",
+      reserve_price: 350,
+      fallback_price: 80,
+      license_count: 0,
+      marketplace_since: archivedSince,
+      rights_transferred: false,
+      duration_hours: 4,
+      starts_at: new Date(now - (40 * 24 + 4) * 60 * 60_000).toISOString(),
+      ends_at: archivedSince,
+      created_at: new Date(now - (40 * 24 + 4) * 60 * 60_000).toISOString(),
+    },
+  ];
+  await insert("auctions", archivedRows, "archived listing");
 
   // 4. Historical sold auctions
   const histAuctionRows = EARNINGS_HIST.map((e) => {

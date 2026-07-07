@@ -264,18 +264,22 @@ export async function notifyWatchlistUrgent({
 export async function notifyContentApproved({
   photographerId,
   auctionId,
+  marketplace = false,
 }: NotifyContentParams): Promise<void> {
   const { data: auction } = await supabaseAdmin
     .from("auctions")
     .select("title")
     .eq("id", auctionId)
     .single();
+  const title = (auction as { title: string } | null)?.title;
   await createNotification({
     userId: photographerId,
     type: "content_approved",
     auctionId,
     title: "✅ Your listing is live!",
-    body: `"${(auction as { title: string } | null)?.title}" has been approved and is now visible to all verified buyers.`,
+    body: marketplace
+      ? `"${title}" has been approved and is live on the marketplace — buyers can license it instantly at your fixed price.`
+      : `"${title}" has been approved and is now visible to all verified buyers.`,
     sendEmail: true,
   });
 }

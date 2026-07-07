@@ -51,14 +51,44 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     const { data: auction } = await supabaseAdmin
       .from("auctions")
-      .select("photographer_id, title")
+      .select("photographer_id, title, status, marketplace_since")
       .eq("id", auctionId)
       .single();
     if (!auction) return res.status(404).json({ error: "Auction not found" });
 
-    const a = auction as { photographer_id: string; title: string };
+    const a = auction as {
+      photographer_id: string;
+      title: string;
+      status: string;
+      marketplace_since: string | null;
+    };
 
     if (decision === "approved") {
+      // A pending row with marketplace_since set is a direct-to-marketplace
+      // listing (the create endpoint stamps it as the marker; auction-path rows
+      // only gain marketplace_since after closing, never while pending). It
+      // publishes at its fixed price instead of activating an auction; the
+      // timestamp is refreshed so the 30-day archive clock starts at approval.
+      if (a.status === "pending" && a.marketplace_since != null) {
+        await supabaseAdmin
+          .from("auctions")
+          .update({
+            status: "marketplace",
+            marketplace_since: new Date().toISOString(),
+          })
+          .eq("id", auctionId)
+          .eq("status", "pending");
+        await notifyContentApproved({
+          photographerId: a.photographer_id,
+          auctionId: auctionId!,
+          marketplace: true,
+        });
+        return res.status(200).json({
+          success: true,
+          message: "Listing approved and published to the marketplace",
+        });
+      }
+
       await activateAuction(auctionId!);
       await notifyContentApproved({
         photographerId: a.photographer_id,

@@ -153,3 +153,70 @@ describe("PATCH /api/auctions/[id] — marketplace fallback price", () => {
     expect(db.updates("auctions")).toHaveLength(0);
   });
 });
+
+// ── POST /api/auctions — direct-to-marketplace listings (listing_type) ────────
+
+const marketplaceBody = (over: Record<string, unknown> = {}) => ({
+  title: "Starship Launch",
+  category: "Launch Event",
+  content_type: "photo",
+  preview_url: "https://preview",
+  listing_type: "marketplace",
+  fallback_price: 55,
+  attestation: {
+    confirmed_ownership: true,
+    confirmed_unpublished: true,
+    confirmed_no_third_party: true,
+    confirmed_consequences: true,
+  },
+  ...over,
+});
+
+describe("POST /api/auctions — listing_type='marketplace'", () => {
+  it("creates a pending marketplace listing without auction fields", async () => {
+    const res = await runCreate(marketplaceBody());
+    expect(res.statusCode).toBe(201);
+    const insert = db.inserts("auctions")[0];
+    expect(insert).toMatchObject({
+      status: "pending",
+      fallback_price: 55,
+      // reserve_price (NOT NULL column) mirrors the price; never gates a bid.
+      reserve_price: 55,
+      exclusivity: "Non-Exclusive",
+    });
+    // The pending-marketplace marker admin review branches on.
+    expect(insert.marketplace_since).toEqual(expect.any(String));
+    // No auction window: duration keeps its column default.
+    expect(insert).not.toHaveProperty("duration_hours");
+  });
+
+  it("forces Non-Exclusive even if another exclusivity is sent", async () => {
+    const res = await runCreate(
+      marketplaceBody({ exclusivity: "Full Exclusive" }),
+    );
+    expect(res.statusCode).toBe(201);
+    expect(db.inserts("auctions")[0]).toMatchObject({
+      exclusivity: "Non-Exclusive",
+    });
+  });
+
+  it("rejects a marketplace listing without a price", async () => {
+    const res = await runCreate(marketplaceBody({ fallback_price: undefined }));
+    expect(res.statusCode).toBe(400);
+    expect(db.inserts("auctions")).toHaveLength(0);
+  });
+
+  it("rejects an unknown listing_type", async () => {
+    const res = await runCreate(validBody({ listing_type: "raffle" }));
+    expect(res.statusCode).toBe(400);
+    expect(db.inserts("auctions")).toHaveLength(0);
+  });
+
+  it("still requires reserve + duration on the default auction path", async () => {
+    const res = await runCreate(
+      validBody({ reserve_price: undefined, listing_type: "auction" }),
+    );
+    expect(res.statusCode).toBe(400);
+    expect(db.inserts("auctions")).toHaveLength(0);
+  });
+});
