@@ -9,6 +9,7 @@ type Handler = (req: NextApiRequest, res: NextApiResponse) => Promise<unknown>;
 
 const db = makeSupabaseHarness();
 const createCheckoutSession = vi.fn();
+const ensureCustomer = vi.fn();
 
 vi.mock("../../lib/supabase", () => ({
   supabaseAdmin: db.supabaseAdmin,
@@ -16,7 +17,7 @@ vi.mock("../../lib/supabase", () => ({
   supabaseQuery: db.supabaseQuery,
   supabase: db.supabase,
 }));
-vi.mock("../../lib/stripe", () => ({ createCheckoutSession }));
+vi.mock("../../lib/stripe", () => ({ createCheckoutSession, ensureCustomer }));
 
 let purchase: Handler;
 let detail: Handler;
@@ -25,6 +26,11 @@ let acceptLicense: Handler;
 beforeEach(async () => {
   db.reset();
   vi.clearAllMocks();
+  // Default: the stored customer id is valid, so it passes through unchanged.
+  ensureCustomer.mockImplementation(async (id: string | null) => ({
+    id: id ?? "cus_new",
+    changed: false,
+  }));
   purchase = (await import("../../pages/api/marketplace/[id]/purchase")).default;
   detail = (await import("../../pages/api/marketplace/[id]")).default;
   acceptLicense = (
@@ -148,11 +154,12 @@ describe("POST /api/marketplace/[id]/purchase", () => {
     );
   });
 
-  it("409s when the photographer has no Connect account (no payout destination)", async () => {
+  it("proceeds without a Connect account — platform holds funds, no destination transfer", async () => {
     db.setResolver(({ table, terminal }: ResolveCtx) => {
       if (table === "auctions" && terminal === "single")
         return {
           data: makeAuction({
+            id: "auction-1",
             status: "marketplace",
             fallback_price: 100,
             photographer_id: "photographer-1",
@@ -160,14 +167,67 @@ describe("POST /api/marketplace/[id]/purchase", () => {
           }),
           error: null,
         };
+      if (table === "transactions" && terminal === "single")
+        return { data: { id: "tx-88" }, error: null };
       return { data: null, error: null };
     });
+    createCheckoutSession.mockResolvedValue({ url: "https://checkout.example" });
 
-    const res = await run({ user: makeUser({ id: "buyer-1" }) });
-    expect(res.statusCode).toBe(409);
-    // The sale never starts: no transaction, no checkout session.
-    expect(db.inserts("transactions")).toHaveLength(0);
-    expect(createCheckoutSession).not.toHaveBeenCalled();
+    const res = await run({
+      user: makeUser({ id: "buyer-1", stripe_customer_id: "cus_123" }),
+    });
+
+    // The sale is NOT blocked (mirrors the won-auction flow): the transaction is
+    // created and checkout starts with no destination account, so the platform
+    // collects the full amount and reconciles the payout once onboarding completes.
+    expect(res.statusCode).toBe(200);
+    expect(db.inserts("transactions")).toHaveLength(1);
+    expect(createCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auctionId: "auction-1",
+        transactionId: "tx-88",
+        purchaseType: "marketplace",
+        photographerAccountId: null,
+      }),
+    );
+  });
+
+  it("heals a dangling buyer customer id and persists the replacement", async () => {
+    // Stored id no longer exists in the current Stripe account → ensureCustomer
+    // recreates it (the "No such customer" self-heal).
+    ensureCustomer.mockResolvedValueOnce({ id: "cus_fresh", changed: true });
+    db.setResolver(({ table, terminal }: ResolveCtx) => {
+      if (table === "auctions" && terminal === "single")
+        return {
+          data: makeAuction({
+            id: "auction-1",
+            status: "marketplace",
+            fallback_price: 250,
+            photographer_id: "photographer-1",
+            users: { stripe_account_id: "acct_1" },
+          }),
+          error: null,
+        };
+      if (table === "transactions" && terminal === "single")
+        return { data: { id: "tx-91" }, error: null };
+      return { data: null, error: null };
+    });
+    createCheckoutSession.mockResolvedValue({ url: "https://checkout.example" });
+
+    const res = await run({
+      user: makeUser({ id: "buyer-1", stripe_customer_id: "cus_stale" }),
+    });
+
+    expect(res.statusCode).toBe(200);
+    // Checkout uses the healed customer, never the dangling stored id.
+    expect(createCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({ buyerStripeId: "cus_fresh" }),
+    );
+    // And the replacement is written back so the next purchase skips the round-trip.
+    const userUpdate = db
+      .updates("users")
+      .find((row) => "stripe_customer_id" in row);
+    expect(userUpdate).toMatchObject({ stripe_customer_id: "cus_fresh" });
   });
 
   it("400s (with the license terms) when the click-through is not accepted", async () => {

@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withErrorHandling } from "../../../../lib/api";
 import { getUserFromRequest, supabaseAdmin } from "../../../../lib/supabase";
-import { createCheckoutSession } from "../../../../lib/stripe";
+import { createCheckoutSession, ensureCustomer } from "../../../../lib/stripe";
 import { computeSplit } from "../../../../lib/money";
 import { LICENSE_VERSION, LICENSE_LEGAL_TEXT } from "../../../../lib/license";
 import type { DbUser, DbAuction } from "../../../../lib/types";
@@ -66,14 +66,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       .status(403)
       .json({ error: "You cannot license your own content" });
 
-  // Without a Connect account there is no destination for the photographer's 80%
-  // — Stripe would settle the full amount to the platform with no payout path.
-  // Block the sale rather than silently keeping the photographer's share.
-  if (!a.users?.stripe_account_id)
-    return res.status(409).json({
-      error:
-        "This photographer has not completed payout onboarding yet. Please try again later.",
-    });
+  // A missing Connect account does NOT block the sale — this mirrors the
+  // won-auction checkout (stripe/connect.ts), where createCheckoutSession simply
+  // omits the destination transfer and the platform collects the full amount,
+  // and the webhook only records a payout when a connected account exists. The
+  // photographer's net is reconciled once they finish payout onboarding.
 
   // A license is perpetual and non-exclusive — the same buyer paying twice for
   // the same content is a mistake, not a feature. (Different buyers licensing
@@ -90,6 +87,23 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(409).json({
       error: "You already hold a license for this content.",
     });
+
+  // The stored customer id can dangle (wiped Stripe test data, a rotated key, or
+  // a DB seeded against another Stripe account) and Checkout would then fail with
+  // "No such customer". Resolve it to a customer that exists in the current
+  // account BEFORE creating any rows, and persist a healed id so the next
+  // purchase skips the round-trip.
+  const { id: buyerStripeId, changed: buyerCustomerChanged } =
+    await ensureCustomer(
+      u.stripe_customer_id,
+      u.email,
+      u.display_name ?? undefined,
+    );
+  if (buyerCustomerChanged)
+    await supabaseAdmin
+      .from("users")
+      .update({ stripe_customer_id: buyerStripeId })
+      .eq("id", u.id);
 
   // Same money split the auction engine uses (single source of truth, lib/money).
   const {
@@ -155,7 +169,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   const origin = frontendOrigin();
   const session = await createCheckoutSession({
     amount: grossAmount,
-    buyerStripeId: u.stripe_customer_id,
+    buyerStripeId,
     auctionId: a.id,
     transactionId,
     purchaseType: "marketplace",

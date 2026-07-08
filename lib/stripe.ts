@@ -125,6 +125,33 @@ export async function getOrCreateCustomer(
   return getStripe().customers.create({ email, name });
 }
 
+// Resolve a Stripe customer id that is guaranteed to exist in the CURRENT
+// account. Customer ids are account- and mode-scoped, so a wiped test dataset, a
+// rotated STRIPE_SECRET_KEY, or a DB seeded against another account leaves the
+// stored id dangling — Checkout then fails with "No such customer". Verify the
+// stored id still resolves; if it is missing or the customer was deleted, fall
+// back to getOrCreateCustomer (idempotent by email) and return the fresh id.
+// `changed` tells the caller whether to persist the replacement. Any non-missing
+// Stripe error (auth, network) is surfaced untouched.
+export async function ensureCustomer(
+  customerId: string | null,
+  email: string,
+  name?: string,
+): Promise<{ id: string; changed: boolean }> {
+  if (customerId) {
+    try {
+      const existing = await getStripe().customers.retrieve(customerId);
+      if (!("deleted" in existing && existing.deleted))
+        return { id: customerId, changed: false };
+    } catch (err) {
+      // Only self-heal a genuinely missing customer; surface everything else.
+      if ((err as { code?: string })?.code !== "resource_missing") throw err;
+    }
+  }
+  const customer = await getOrCreateCustomer(email, name);
+  return { id: customer.id, changed: customer.id !== customerId };
+}
+
 export async function createConnectAccount(
   email: string,
   displayName?: string,

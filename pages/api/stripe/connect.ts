@@ -4,6 +4,7 @@ import { getUserFromRequest, supabaseAdmin } from "../../../lib/supabase";
 import {
   createConnectOnboardingLink,
   createCheckoutSession,
+  ensureCustomer,
 } from "../../../lib/stripe";
 import type { DbUser, DbAuction } from "../../../lib/types";
 
@@ -73,10 +74,26 @@ async function createCheckout(req: NextApiRequest, res: NextApiResponse) {
     .limit(1)
     .maybeSingle();
 
+  // A stored customer id can dangle (wiped Stripe test data, a rotated key, or a
+  // DB seeded against another account) and Checkout would fail with "No such
+  // customer". Resolve it to a customer in the current account, persisting a
+  // healed id. Same self-heal the marketplace purchase path uses.
+  const { id: buyerStripeId, changed: buyerCustomerChanged } =
+    await ensureCustomer(
+      u.stripe_customer_id,
+      u.email,
+      u.display_name ?? undefined,
+    );
+  if (buyerCustomerChanged)
+    await supabaseAdmin
+      .from("users")
+      .update({ stripe_customer_id: buyerStripeId })
+      .eq("id", u.id);
+
   const origin = frontendOrigin();
   const session = await createCheckoutSession({
     amount: a.sale_price!,
-    buyerStripeId: u.stripe_customer_id,
+    buyerStripeId,
     auctionId: auctionId!,
     transactionId: (tx as { id: string } | null)?.id,
     purchaseType: "auction",
