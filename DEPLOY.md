@@ -22,6 +22,7 @@
    - `fullres` (**PRIVATE**)
    - `avatars` (public)
 6. Settings → API → Copy and save: Project URL, anon key, service_role key
+7. Do **not** run `scripts/seed.js` against production. It is local/dev-only and refuses to run unless `RRMM_ALLOW_LOCAL_SEED=true`.
 
 ---
 
@@ -89,6 +90,8 @@ SET role = 'admin', verified = true
 WHERE email = 'your@email.com';
 ```
 
+> Public admin signup through `/api/auth/sync` is disabled unless `ADMIN_SIGNUP_SECRET` is configured and supplied by the caller.
+
 ---
 
 ## ENVIRONMENT VARIABLES
@@ -117,10 +120,13 @@ These match the variables in `.env.example` in your repo.
 | `DOCUSIGN_TEMPLATE_ID` | DocuSign → Templates → your rights transfer template |
 | `DOCUSIGN_BASE_URL` | `https://na4.docusign.net/restapi` (demo: `https://demo.docusign.net/restapi`) |
 | `NEXT_PUBLIC_APP_URL` | Your Vercel URL, e.g. `https://rrmm-backend-abc123.vercel.app` |
+| `ADMIN_SIGNUP_SECRET` | Random secret required for any admin signup attempt through `/api/auth/sync` |
 | `PLATFORM_FEE_PCT` | `0.20` (20% platform commission — adjust if needed) |
 | `CRON_SECRET` | Any random string — used to secure the cron endpoint |
 
 > **Never share `SUPABASE_SERVICE_ROLE_KEY` or `STRIPE_SECRET_KEY` publicly** — these give full access to your database and Stripe account.
+
+To remove existing demo inventory before launch, run the SQL in `supabase/remove_demo_inventory.sql` from the Supabase SQL Editor.
 
 ---
 

@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withErrorHandling } from "../../../lib/api";
 import { supabaseAdmin, getUserFromRequest, supabaseQuery } from "../../../lib/supabase";
+import { isDemoAuction } from "../../../lib/demo-inventory";
 import type { DbUser, DbAuction } from "../../../lib/types";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -22,7 +23,9 @@ async function getAuction(req: NextApiRequest, res: NextApiResponse, id: string)
     .eq("id", id)
     .single();
 
-  if (error || !auction) return res.status(404).json({ error: "Auction not found" });
+  if (error || !auction || isDemoAuction(auction as DbAuction)) {
+    return res.status(404).json({ error: "Auction not found" });
+  }
 
   const a = auction as DbAuction;
   await supabaseAdmin.from("auctions").update({ view_count: a.view_count + 1 }).eq("id", id);
