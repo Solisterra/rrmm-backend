@@ -9,7 +9,8 @@
  *   - Buyers:        body must include { role: "buyer", handle } (self-serve)
  *   - Photographers: body must include { role: "photographer", handle, ... }
  *   - Admins:        body must include { role: "admin" }, plus adminCode matching
- *                    ADMIN_SIGNUP_SECRET when that env var is set (/mission-control)
+ *                    ADMIN_SIGNUP_SECRET. If the secret is unset, admin signup
+ *                    is disabled.
  *   - Legacy buyers may still arrive with { inviteToken } from an approved app
  *
  * Auth: Bearer <supabase session access_token>
@@ -195,10 +196,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   // ── Admin path — self-registration via the private /mission-control page ──
   if (role === "admin") {
-    // When ADMIN_SIGNUP_SECRET is configured, the caller must supply it as
-    // adminCode. Without it set (dev), the obscure URL is the only gate.
-    const requiredCode = process.env.ADMIN_SIGNUP_SECRET;
-    if (requiredCode && adminCode !== requiredCode) {
+    const requiredCode = process.env.ADMIN_SIGNUP_SECRET?.trim();
+    if (!requiredCode) {
+      return res.status(403).json({ error: "Admin signup is disabled." });
+    }
+    if (adminCode !== requiredCode) {
       return res.status(403).json({ error: "Invalid admin registration code." });
     }
 

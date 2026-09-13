@@ -21,4 +21,9 @@
 | GET | `/api/admin/attestations` | Admin attestation audit log |
 | GET, POST | `/api/access/apply` | Submit buyer application / list applications (admin) |
 | POST | `/api/access/review` | Review buyer application or send direct invite (admin) |
+| GET | `/api/marketplace` | Launch-safe marketplace inventory (empty until real items exist) |
 | GET | `/api/cron/close-auctions` | Close expired auctions (requires `Authorization: Bearer <CRON_SECRET>`) |
+
+## Local-only seed data
+
+`/home/runner/work/rrmm-backend/rrmm-backend/scripts/seed.js` is for local/dev demo data only. It now refuses to run unless `RRMM_ALLOW_LOCAL_SEED=true`, and it aborts if the environment looks like Vercel or `rrmm.io`.

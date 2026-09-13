@@ -12,6 +12,27 @@ const db = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
 
+function ensureLocalSeedOnly() {
+  if (process.env.RRMM_ALLOW_LOCAL_SEED !== "true") {
+    throw new Error(
+      "scripts/seed.js is local/dev only. Re-run with RRMM_ALLOW_LOCAL_SEED=true after confirming your local environment.",
+    );
+  }
+
+  if (process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production") {
+    throw new Error("Refusing to run scripts/seed.js in production.");
+  }
+
+  const appUrl = String(process.env.NEXT_PUBLIC_APP_URL ?? process.env.FRONTEND_URL ?? "").toLowerCase();
+  if (
+    appUrl.includes("rrmm.io") ||
+    appUrl.includes("rrmm-backend.vercel.app") ||
+    appUrl.includes("vercel.app")
+  ) {
+    throw new Error(`Refusing to run scripts/seed.js against non-local app URL: ${appUrl}`);
+  }
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function parseFollowers(str) {
@@ -313,6 +334,7 @@ async function clear() {
 // ── main ──────────────────────────────────────────────────────────────────────
 
 async function run() {
+  ensureLocalSeedOnly();
   await clear();
   console.log("Seeding RRMM database...\n");
 

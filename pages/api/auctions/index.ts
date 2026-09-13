@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { withErrorHandling } from "../../../lib/api";
 import { supabaseAdmin, getUserFromRequest } from "../../../lib/supabase";
 import { formatAuction } from "../../../lib/format";
+import { isDemoAuction } from "../../../lib/demo-inventory";
 import type { DbUser, DbAuction, AuctionStatus } from "../../../lib/types";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -31,7 +32,7 @@ async function getAuctions(req: NextApiRequest, res: NextApiResponse) {
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
 
-  const auctions = (data as DbAuction[] | null ?? []).map((row) => {
+  const auctions = (data as DbAuction[] | null ?? []).filter((row) => !isDemoAuction(row)).map((row) => {
     const { full_url: _full_url, ...rest } = formatAuction(row);
     return rest;
   });
